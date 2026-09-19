@@ -23,6 +23,12 @@ import numpy as np
 import gymnasium as gym
 import rware  # noqa: F401  — registers RWARE envs with gymnasium
 
+import sys
+from pathlib import Path
+# Add src to the Python path so we can import our new module
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+from src.metrics_logger import MetricsLogger
+
 
 def load_config(config_path: str) -> dict:
     """Load and return the YAML configuration file."""
@@ -71,6 +77,9 @@ def run_validation(config: dict) -> list[dict]:
 
     n_agents = env.unwrapped.n_agents
     results = []
+    
+    # Initialize our shiny new logger!
+    logger = MetricsLogger(n_agents)
 
     for ep in range(1, num_episodes + 1):
         # Reset with a deterministic seed per episode for reproducibility
@@ -84,7 +93,9 @@ def run_validation(config: dict) -> list[dict]:
             f"Expected {n_agents} observations, got {len(obs)}"
         )
 
-        ep_reward = 0.0
+        # Reset our logger for the new episode
+        logger.reset_episode()
+        
         ep_steps = 0
         ep_terminated = False
         ep_truncated = False
@@ -102,7 +113,9 @@ def run_validation(config: dict) -> list[dict]:
                 f"Step {ep_steps}: expected {n_agents} rewards, got {len(rewards)}"
             )
 
-            ep_reward += sum(rewards)
+            # Let the logger do the math!
+            logger.log_step(rewards)
+            
             ep_steps += 1
 
             # Check termination: RWARE returns per-agent done flags
@@ -121,18 +134,19 @@ def run_validation(config: dict) -> list[dict]:
                 ep_truncated = done_truncated
                 break
 
+        # Grab the total reward from the logger so we can still print it
+        summary = logger.get_episode_summary()
+        
         results.append({
             "episode": ep,
-            "total_reward": ep_reward,
+            "total_reward": summary["team_reward"],
             "steps": ep_steps,
             "terminated": ep_terminated,
             "truncated": ep_truncated,
         })
 
-        # Progress indicator
-        print(f"  Episode {ep:>3d}/{num_episodes} - "
-              f"steps: {ep_steps:>4d}, reward: {ep_reward:>8.2f}, "
-              f"{'TERMINATED' if ep_terminated else 'TRUNCATED'}")
+        # Print the detailed breakdown for this episode!
+        logger.print_summary(ep)
 
     env.close()
     return results
