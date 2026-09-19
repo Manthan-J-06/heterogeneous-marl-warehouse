@@ -31,7 +31,22 @@ def main():
         writer.add_scalar('Episode/Length', ep_data['steps'], ep)
         writer.add_scalar('Episode/Tasks_Completed', ep_data['tasks_completed'], ep)
         
+    # Explicitly test the zero-step case
+    logger.start_episode()
+    logger.end_episode()
+    
+    # Log the zero-step episode to TensorBoard
+    ep_data = logger.history[-1]
+    writer.add_scalar('Episode/Total_Reward', ep_data['total_reward'], num_episodes)
+    writer.add_scalar('Episode/Length', ep_data['steps'], num_episodes)
+    writer.add_scalar('Episode/Tasks_Completed', ep_data['tasks_completed'], num_episodes)
+    
     writer.close()
+    
+    # Export all metrics to CSV and confirm
+    logger.export_to_csv('metrics.csv')
+    print("Successfully exported metrics to metrics.csv")
+    print() # blank line for readability
         
     print(f"{'Episode':<10} | {'Total Reward':<15} | {'Steps':<10} | {'Tasks Completed':<15}")
     print("-" * 57)
