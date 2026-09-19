@@ -85,7 +85,7 @@ validation:
   - `2`: Move Forward
   - `3`: Load / Unload Shelf
   - `4`: No-op (Wait)
-- **Observation Space (per agent):** `Box(low=-inf, high=inf, shape=(115,), dtype=float32)` (or discrete grid features)
+- **Observation Space (per agent):** `Box(low=-inf, high=inf, shape=(71,), dtype=float32)` (or discrete grid features)
 - **Max Steps:** 500 steps per episode
 
 ---
