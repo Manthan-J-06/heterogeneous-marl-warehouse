@@ -3,7 +3,7 @@ from mock_env import MockEnv
 from torch.utils.tensorboard import SummaryWriter
 
 def main():
-    logger = MetricsLogger()
+    logger = MetricsLogger(num_agents=2)
     env = MockEnv()
     writer = SummaryWriter('runs/')
     
@@ -16,9 +16,9 @@ def main():
         done = False
         while not done:
             action = 0  # dummy action
-            obs, reward, terminated, truncated, info = env.step(action)
+            obs, rewards, terminated, truncated, info = env.step(action)
             
-            logger.log_step(reward, info.get('task_completed', False))
+            logger.log_step(rewards, info.get('task_completed', False))
             
             if terminated or truncated:
                 done = True
@@ -48,10 +48,11 @@ def main():
     print("Successfully exported metrics to metrics.csv")
     print() # blank line for readability
         
-    print(f"{'Episode':<10} | {'Total Reward':<15} | {'Steps':<10} | {'Tasks Completed':<15}")
-    print("-" * 57)
+    print(f"{'Episode':<10} | {'Total Reward':<15} | {'Steps':<10} | {'Tasks Completed':<15} | {'Per-Agent Rewards'}")
+    print("-" * 80)
     for i, ep_data in enumerate(logger.history):
-        print(f"{i+1:<10} | {ep_data['total_reward']:<15.2f} | {ep_data['steps']:<10} | {ep_data['tasks_completed']:<15}")
+        per_agent_str = ", ".join([f"{r:.2f}" for r in ep_data.get('per_agent_rewards', [])])
+        print(f"{i+1:<10} | {ep_data['total_reward']:<15.2f} | {ep_data['steps']:<10} | {ep_data['tasks_completed']:<15} | {per_agent_str}")
 
 if __name__ == '__main__':
     main()
