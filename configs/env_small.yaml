@@ -1,0 +1,13 @@
+# Small-scale warehouse environment configuration for Phase 1 validation.
+# Used by scripts/validate_env.py to run random-policy rollouts.
+
+environment:
+  # RWARE environment ID. "rware-tiny-2ag-v2" is the smallest built-in config:
+  # ~10x11 grid, 2 agents, 1 request queue size.
+  env_id: "rware-tiny-2ag-v2"
+
+validation:
+  # Number of episodes to run for the random-policy validation.
+  num_episodes: 20
+  # Random seed for reproducibility.
+  seed: 42

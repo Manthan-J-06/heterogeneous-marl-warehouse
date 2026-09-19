@@ -1,0 +1,22 @@
+# Virtual environment
+.venv/
+env/
+venv/
+ENV/
+
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Experiment logs and models
+runs/
+logs/
+checkpoints/
+*.pt
+*.pth
+
+# OS generated files
+.DS_Store
+Thumbs.db
