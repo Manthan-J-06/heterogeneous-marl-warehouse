@@ -1,10 +1,11 @@
 from metrics_logger import MetricsLogger
-from mock_env import MockEnv
+import gymnasium as gym
+import rware
 from torch.utils.tensorboard import SummaryWriter
 
 def main():
     logger = MetricsLogger(num_agents=2)
-    env = MockEnv()
+    env = gym.make("rware-tiny-2ag-v2")
     writer = SummaryWriter('runs/')
     
     num_episodes = 10
@@ -15,10 +16,11 @@ def main():
         
         done = False
         while not done:
-            action = 0  # dummy action
+            action = env.action_space.sample()
             obs, rewards, terminated, truncated, info = env.step(action)
             
-            logger.log_step(rewards, info.get('task_completed', False))
+            task_completed = sum(rewards) > 0
+            logger.log_step(rewards, task_completed)
             
             if terminated or truncated:
                 done = True
