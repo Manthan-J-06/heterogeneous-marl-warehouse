@@ -38,23 +38,31 @@ from heterogeneous_env import NOOP_ACTION, HeterogeneousRWAREWrapper
 ENV_ID = "rware-tiny-2ag-v2"
 SPEEDS: List[float] = [1.0, 0.3]
 CAPACITIES: List[int] = [10, 10]
+BATTERY_CAPACITIES: List[float] = [50.0, 50.0]
 NUM_EPISODES = 5
 
 # -----------------------------------------------------------------------
 # Setup
 # -----------------------------------------------------------------------
 base_env = gym.make(ENV_ID)
-env = HeterogeneousRWAREWrapper(base_env, speeds=SPEEDS, capacities=CAPACITIES)
+env = HeterogeneousRWAREWrapper(
+    base_env, 
+    speeds=SPEEDS, 
+    capacities=CAPACITIES, 
+    battery_capacities=BATTERY_CAPACITIES
+)
 n_agents = len(SPEEDS)
 
 total_steps = 0
 noop_counts = [0] * n_agents            # times a no-op was injected by speed
 capacity_blocked_counts = [0] * n_agents # times an action was blocked by capacity
+dead_counts = [0] * n_agents            # times an action was blocked by zero battery
 action_counts = [0] * n_agents          # total steps taken per agent
 
 print(f"Environment : {ENV_ID}")
 print(f"Agent speeds: {SPEEDS}")
 print(f"Capacities  : {CAPACITIES}")
+print(f"Batteries   : {BATTERY_CAPACITIES}")
 print(f"Episodes    : {NUM_EPISODES}")
 print("-" * 40)
 
@@ -82,9 +90,10 @@ for episode in range(1, NUM_EPISODES + 1):
 
         obs, rewards, terminated, truncated, info = env.step(random_actions)
         
-        # Accumulate capacity constraints blocked this step
+        # Accumulate capacity constraints and dead blocks this step
         for i in range(n_agents):
             capacity_blocked_counts[i] += env.capacity_blocks_this_step[i]
+            dead_counts[i] += env.dead_blocks_this_step[i]
 
         episode_steps += 1
 
@@ -105,6 +114,8 @@ for episode in range(1, NUM_EPISODES + 1):
     total_steps += episode_steps
     print(f"  Episode {episode}: {episode_steps} steps")
 
+# Snapshot final battery levels before closing
+final_batteries = env.get_battery_levels()
 env.close()
 
 # -----------------------------------------------------------------------
@@ -113,19 +124,22 @@ env.close()
 print("-" * 40)
 print(f"Total steps across all episodes: {total_steps}")
 print()
-print(f"{'Agent':<8} {'Speed':<8} {'Cap':<6} {'Speed No-ops':<14} {'Cap Blocks':<12} {'Total Steps'}")
-print("-" * 65)
+print(f"{'Agent':<6} {'Speed':<6} {'Cap':<4} {'Batt':<6} {'Speed No-ops':<13} {'Cap Blocks':<11} {'Dead Steps':<11} {'Total'}")
+print("-" * 75)
 for i in range(n_agents):
     steps = action_counts[i]
     speed_noops = noop_counts[i]
     cap_blocks = capacity_blocked_counts[i]
+    dead = dead_counts[i]
     print(
-        f"  {i:<6} {SPEEDS[i]:<8.1f} {CAPACITIES[i]:<6} {speed_noops:<14} "
-        f"{cap_blocks:<12} {steps:<12}"
+        f"  {i:<4} {SPEEDS[i]:<6.1f} {CAPACITIES[i]:<4} {BATTERY_CAPACITIES[i]:<6.1f} "
+        f"{speed_noops:<13} {cap_blocks:<11} {dead:<11} {steps:<11}"
     )
 
 print()
 print("Validation notes:")
+print(f"  Agent 0 final battery: {final_batteries[0]:.1f}")
+print(f"  Agent 1 final battery: {final_batteries[1]:.1f}")
 print(f"  Agent 0 (speed 1.0): speed no-ops should be ~0%   → got {noop_counts[0] / max(action_counts[0],1)*100:.1f}%")
 print(f"  Agent 1 (speed 0.3): speed no-ops should be ~70%  → got {noop_counts[1] / max(action_counts[1],1)*100:.1f}%")
-print(f"  Capacity blocks: expect low values for short capacities (10) since average episode is brief.")
+print(f"  Dead Steps: Should be non-zero if total steps * avg cost > battery budget.")

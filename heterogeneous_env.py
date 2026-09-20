@@ -38,15 +38,18 @@ class HeterogeneousRWAREWrapper(gym.Wrapper):
     capacities : List[int], optional
         Per-agent capacity values (max consecutive loaded steps).
         Defaults to effectively infinite for backward compatibility.
+    battery_capacities : List[float], optional
+        Per-agent battery capacity values (starting energy budget).
+        Defaults to effectively infinite for backward compatibility.
 
     Raises
     ------
     ValueError
-        If any speed value is outside [0.0, 1.0], or if the number of speed
-        or capacity values does not match the number of agents.
+        If any speed value is outside [0.0, 1.0], or if the number of speed,
+        capacity, or battery values does not match the number of agents.
     """
 
-    def __init__(self, env: gym.Env, speeds: List[float], capacities: List[int] = None) -> None:
+    def __init__(self, env: gym.Env, speeds: List[float], capacities: List[int] = None, battery_capacities: List[float] = None) -> None:
         super().__init__(env)
 
         n_agents = len(env.action_space)
@@ -69,31 +72,53 @@ class HeterogeneousRWAREWrapper(gym.Wrapper):
                 f"but got {len(capacities)}."
             )
 
+        if battery_capacities is None:
+            battery_capacities = [1e9] * n_agents
+        elif len(battery_capacities) != n_agents:
+            raise ValueError(
+                f"Expected {n_agents} battery capacity values, "
+                f"but got {len(battery_capacities)}."
+            )
+
         self.speeds: List[float] = list(speeds)
         self.capacities: List[int] = list(capacities)
+        self.battery_capacities: List[float] = list(battery_capacities)
 
         # Internal state to track how long each agent has been carrying something
         self.is_carrying: List[bool] = [False] * n_agents
         self.carry_steps: List[int] = [0] * n_agents
+        
+        # Internal state for battery levels
+        self.battery_levels: List[float] = list(self.battery_capacities)
 
     def reset(self, **kwargs):
-        """Reset the environment and internal carry state."""
+        """Reset the environment and internal carry/battery state."""
         self.is_carrying = [False] * len(self.speeds)
         self.carry_steps = [0] * len(self.speeds)
+        self.battery_levels = list(self.battery_capacities)
         return self.env.reset(**kwargs)
+
+    def get_battery_levels(self) -> List[float]:
+        """Return the current battery levels of each agent."""
+        return list(self.battery_levels)
 
     # ------------------------------------------------------------------
     # Core override
     # ------------------------------------------------------------------
 
     def step(self, actions):
-        """Apply stochastic no-op injection and capacity constraint blocks.
+        """Apply stochastic no-op injection, capacity blocks, and battery depletion.
 
-        1. Speeds: For each agent *i*, with probability ``(1 - speeds[i])``
+        1. Dead state: If battery <= 0, action is forced to NOOP_ACTION.
+        2. Speeds: For each agent *i*, with probability ``(1 - speeds[i])``
            the action is replaced by ``NOOP_ACTION``.
-        2. Capacities: If an agent's ``carry_steps`` exceed ``capacities[i]``,
+        3. Capacities: If an agent's ``carry_steps`` exceed ``capacities[i]``,
            any remaining action other than Unload (3) is replaced by
            ``NOOP_ACTION`` to force an unload.
+        4. Battery depletion: The final effective action costs are deducted:
+           - Move actions (0, 1, 2) cost 1.0
+           - Load/Unload (3) costs 2.0
+           - Idle/No-op (4) costs 0.5
 
         Returns
         -------
@@ -103,16 +128,25 @@ class HeterogeneousRWAREWrapper(gym.Wrapper):
         """
         # Expose block counts for validation/metrics this step
         self.capacity_blocks_this_step = [0] * len(self.speeds)
+        self.dead_blocks_this_step = [0] * len(self.speeds)
         
         effective_actions = list(actions)
 
+        # 0. Dead check logic (new)
+        for agent_id, battery in enumerate(self.battery_levels):
+            if battery <= 0.0:
+                effective_actions[agent_id] = NOOP_ACTION
+                self.dead_blocks_this_step[agent_id] = 1
+
         # 1. Speed check logic (existing)
         for agent_id, speed in enumerate(self.speeds):
+            # purely visual note: if they were already dead, this NOOP doesn't matter,
+            # but we still roll for it.
             skip_prob = 1.0 - speed
             if random.random() < skip_prob:
                 effective_actions[agent_id] = NOOP_ACTION
 
-        # 2. Capacity check logic (new)
+        # 2. Capacity check logic (existing)
         for agent_id, cp in enumerate(self.capacities):
             a = effective_actions[agent_id]
             if self.is_carrying[agent_id]:
@@ -136,5 +170,17 @@ class HeterogeneousRWAREWrapper(gym.Wrapper):
                     # for simulation/capacity-tracking purposes.
                     self.is_carrying[agent_id] = True
                     self.carry_steps[agent_id] = 0
+
+        # 3. Apply battery depletion based on actual executed action
+        for agent_id, a in enumerate(effective_actions):
+            if self.battery_levels[agent_id] > 0.0:
+                if a == 3:
+                    cost = 2.0
+                elif a == NOOP_ACTION:
+                    cost = 0.5
+                else:
+                    cost = 1.0
+                    
+                self.battery_levels[agent_id] = max(0.0, self.battery_levels[agent_id] - cost)
 
         return self.env.step(effective_actions)
