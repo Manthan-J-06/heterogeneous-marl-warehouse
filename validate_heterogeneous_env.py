@@ -31,6 +31,8 @@ except ImportError as exc:
     )
 
 import yaml
+import random
+import numpy as np
 from pathlib import Path
 from heterogeneous_env import NOOP_ACTION, HeterogeneousRWAREWrapper, build_heterogeneous_env
 
@@ -45,107 +47,104 @@ with open(CONFIG_PATH, "r") as f:
 ENV_ID = config.get("environment", {}).get("env_id", "rware-tiny-2ag-v2")
 NUM_EPISODES = config.get("validation", {}).get("num_episodes", 5)
 
-# -----------------------------------------------------------------------
-# Setup
-# -----------------------------------------------------------------------
-env = build_heterogeneous_env(config)
+def run_evaluation(config: dict, label: str):
+    env = build_heterogeneous_env(config)
 
-SPEEDS = env.speeds
-CAPACITIES = env.capacities
-BATTERY_CAPACITIES = env.battery_capacities
-n_agents = len(SPEEDS)
+    SPEEDS = env.speeds
+    CAPACITIES = env.capacities
+    BATTERY_CAPACITIES = env.battery_capacities
+    ENERGY_WEIGHT = env.energy_weight
+    n_agents = len(SPEEDS)
 
-total_steps = 0
-noop_counts = [0] * n_agents            # times a no-op was injected by speed
-capacity_blocked_counts = [0] * n_agents # times an action was blocked by capacity
-dead_counts = [0] * n_agents            # times an action was blocked by zero battery
-action_counts = [0] * n_agents          # total steps taken per agent
+    total_steps = 0
+    noop_counts = [0] * n_agents
+    capacity_blocked_counts = [0] * n_agents
+    dead_counts = [0] * n_agents
+    action_counts = [0] * n_agents
+    
+    total_rewards = [0.0] * n_agents
+    total_energy = [0.0] * n_agents
 
-print(f"Environment : {ENV_ID}")
-print(f"Agent speeds: {SPEEDS}")
-print(f"Capacities  : {CAPACITIES}")
-print(f"Batteries   : {BATTERY_CAPACITIES}")
-print(f"Episodes    : {NUM_EPISODES}")
-print("-" * 40)
+    print(f"\n{'=' * 75}\n RUN: {label}")
+    print(f" Environment : {ENV_ID}")
+    print(f" Agent speeds: {SPEEDS}")
+    print(f" Capacities  : {CAPACITIES}")
+    print(f" Batteries   : {BATTERY_CAPACITIES}")
+    print(f" Energy Wgt  : {ENERGY_WEIGHT}")
+    print(f" Episodes    : {NUM_EPISODES}\n{'-' * 75}")
 
-# -----------------------------------------------------------------------
-# Episode loop
-# -----------------------------------------------------------------------
-for episode in range(1, NUM_EPISODES + 1):
-    obs, info = env.reset()
-    episode_steps = 0
+    for episode in range(1, NUM_EPISODES + 1):
+        obs, info = env.reset()
+        episode_steps = 0
 
-    while True:
-        # Sample a random action for each agent from its action space
-        random_actions = [
-            env.action_space[i].sample()
-            for i in range(n_agents)
-        ]
+        while True:
+            random_actions = [
+                env.action_space[i].sample()
+                for i in range(n_agents)
+            ]
 
-        # Track which actions *would* become no-ops by mirroring the wrapper's RNG.
-        # (Counting only — the actual injection happens inside the wrapper.)
-        for i, speed in enumerate(SPEEDS):
-            action_counts[i] += 1
-            skip_prob = 1.0 - speed
-            if random.random() < skip_prob:
-                noop_counts[i] += 1
+            for i, speed in enumerate(SPEEDS):
+                action_counts[i] += 1
+                skip_prob = 1.0 - speed
+                if random.random() < skip_prob:
+                    noop_counts[i] += 1
 
-        obs, rewards, terminated, truncated, info = env.step(random_actions)
+            obs, rewards, terminated, truncated, info = env.step(random_actions)
+            
+            for i in range(n_agents):
+                total_rewards[i] += rewards[i]
+                capacity_blocked_counts[i] += getattr(env, "capacity_blocks_this_step", [0]*n_agents)[i]
+                dead_counts[i] += getattr(env, "dead_blocks_this_step", [0]*n_agents)[i]
+
+            episode_steps += 1
+
+            if isinstance(terminated, (list, tuple, np.ndarray)):
+                done_terminated = all(terminated)
+            else:
+                done_terminated = bool(terminated)
+
+            if isinstance(truncated, (list, tuple, np.ndarray)):
+                done_truncated = all(truncated)
+            else:
+                done_truncated = bool(truncated)
+
+            if done_terminated or done_truncated or episode_steps >= 500:
+                break
+
+        total_steps += episode_steps
         
-        # Accumulate capacity constraints and dead blocks this step
-        for i in range(n_agents):
-            capacity_blocked_counts[i] += getattr(env, "capacity_blocks_this_step", [0]*n_agents)[i]
-            dead_counts[i] += getattr(env, "dead_blocks_this_step", [0]*n_agents)[i]
+        # Accumulate energy immediately before the next reset zeroes it out
+        if hasattr(env, "get_energy_consumed"):
+            ep_energy = env.get_energy_consumed()
+            for i in range(n_agents):
+                total_energy[i] += ep_energy[i]
 
-        episode_steps += 1
+    if hasattr(env, "get_battery_levels"):
+        final_batteries = env.get_battery_levels()
+    else:
+        final_batteries = [0.0] * n_agents
+    env.close()
 
-        # Check termination — RWARE may return a list of bools or a single bool
-        if isinstance(terminated, (list, tuple, np.ndarray)):
-            done_terminated = all(terminated)
-        else:
-            done_terminated = bool(terminated)
+    print(f"{'Agent':<6} {'Speed':<6} {'Cap':<4} {'Batt':<6} {'Reward':<10} {'Energy Used':<12} {'Dead Steps':<11} {'Total'}")
+    print("-" * 75)
+    for i in range(n_agents):
+        steps = action_counts[i]
+        dead = dead_counts[i]
+        rew = total_rewards[i]
+        nrg = total_energy[i]
+        print(
+            f"  {i:<4} {SPEEDS[i]:<6.1f} {CAPACITIES[i]:<4} {BATTERY_CAPACITIES[i]:<6.1f} "
+            f"{rew:<10.2f} {nrg:<12.1f} {dead:<11} {steps:<11}"
+        )
 
-        if isinstance(truncated, (list, tuple, np.ndarray)):
-            done_truncated = all(truncated)
-        else:
-            done_truncated = bool(truncated)
 
-        if done_terminated or done_truncated or episode_steps >= 500:
-            break
-
-    total_steps += episode_steps
-    print(f"  Episode {episode}: {episode_steps} steps")
-
-# Snapshot final battery levels before closing
-if hasattr(env, "get_battery_levels"):
-    final_batteries = env.get_battery_levels()
-else:
-    final_batteries = [0.0] * n_agents
-env.close()
-
-# -----------------------------------------------------------------------
-# Results
-# -----------------------------------------------------------------------
-print("-" * 40)
-print(f"Total steps across all episodes: {total_steps}")
-print()
-print(f"{'Agent':<6} {'Speed':<6} {'Cap':<4} {'Batt':<6} {'Speed No-ops':<13} {'Cap Blocks':<11} {'Dead Steps':<11} {'Total'}")
-print("-" * 75)
-for i in range(n_agents):
-    steps = action_counts[i]
-    speed_noops = noop_counts[i]
-    cap_blocks = capacity_blocked_counts[i]
-    dead = dead_counts[i]
-    print(
-        f"  {i:<4} {SPEEDS[i]:<6.1f} {CAPACITIES[i]:<4} {BATTERY_CAPACITIES[i]:<6.1f} "
-        f"{speed_noops:<13} {cap_blocks:<11} {dead:<11} {steps:<11}"
-    )
-
-print()
-print("Validation notes:")
-for i in range(min(2, n_agents)):
-    print(f"  Agent {i} final battery: {final_batteries[i]:.1f}")
-print(f"  Agent 0 (speed: {SPEEDS[0]:.1f}): speed no-ops should be ~{(1 - SPEEDS[0])*100:.0f}%   → got {noop_counts[0] / max(action_counts[0],1)*100:.1f}%")
-if n_agents > 1:
-    print(f"  Agent 1 (speed: {SPEEDS[1]:.1f}): speed no-ops should be ~{(1 - SPEEDS[1])*100:.0f}%  → got {noop_counts[1] / max(action_counts[1],1)*100:.1f}%")
-print(f"  Dead Steps: Should be non-zero if total steps * avg cost > battery budget.")
+if __name__ == "__main__":
+    # Ensure heterogeneity is initialized safely in case config is purely missing the key
+    if "heterogeneity" not in config:
+        config["heterogeneity"] = {"enabled": True, "agents": [{"speed": 1.0}, {"speed": 0.5}]}
+        
+    config["heterogeneity"]["energy_weight"] = 0.0
+    run_evaluation(config, "Zero Energy Penalty (Baseline)")
+    
+    config["heterogeneity"]["energy_weight"] = 0.05
+    run_evaluation(config, "0.05 Energy Weight Penalty")

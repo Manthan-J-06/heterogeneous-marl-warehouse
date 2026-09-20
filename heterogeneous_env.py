@@ -49,7 +49,7 @@ class HeterogeneousRWAREWrapper(gym.Wrapper):
         capacity, or battery values does not match the number of agents.
     """
 
-    def __init__(self, env: gym.Env, speeds: List[float], capacities: List[int] = None, battery_capacities: List[float] = None) -> None:
+    def __init__(self, env: gym.Env, speeds: List[float], capacities: List[int] = None, battery_capacities: List[float] = None, energy_weight: float = 0.0) -> None:
         super().__init__(env)
 
         n_agents = len(env.action_space)
@@ -83,24 +83,31 @@ class HeterogeneousRWAREWrapper(gym.Wrapper):
         self.speeds: List[float] = list(speeds)
         self.capacities: List[int] = list(capacities)
         self.battery_capacities: List[float] = list(battery_capacities)
+        self.energy_weight: float = float(energy_weight)
 
         # Internal state to track how long each agent has been carrying something
         self.is_carrying: List[bool] = [False] * n_agents
         self.carry_steps: List[int] = [0] * n_agents
         
-        # Internal state for battery levels
+        # Internal state for battery levels and energy metrics
         self.battery_levels: List[float] = list(self.battery_capacities)
+        self.energy_consumed: List[float] = [0.0] * n_agents
 
     def reset(self, **kwargs):
         """Reset the environment and internal carry/battery state."""
         self.is_carrying = [False] * len(self.speeds)
         self.carry_steps = [0] * len(self.speeds)
         self.battery_levels = list(self.battery_capacities)
+        self.energy_consumed = [0.0] * len(self.speeds)
         return self.env.reset(**kwargs)
 
     def get_battery_levels(self) -> List[float]:
         """Return the current battery levels of each agent."""
         return list(self.battery_levels)
+        
+    def get_energy_consumed(self) -> List[float]:
+        """Return the total energy consumed by each agent since reset."""
+        return list(self.energy_consumed)
 
     # ------------------------------------------------------------------
     # Core override
@@ -115,16 +122,18 @@ class HeterogeneousRWAREWrapper(gym.Wrapper):
         3. Capacities: If an agent's ``carry_steps`` exceed ``capacities[i]``,
            any remaining action other than Unload (3) is replaced by
            ``NOOP_ACTION`` to force an unload.
-        4. Battery depletion: The final effective action costs are deducted:
+        4. Battery depletion & Energy Penalty: The final effective action costs:
            - Move actions (0, 1, 2) cost 1.0
            - Load/Unload (3) costs 2.0
            - Idle/No-op (4) costs 0.5
+           The cost is deducted from battery_levels and `energy_weight * cost`
+           is subtracted from each agent's reward.
 
         Returns
         -------
         tuple
             ``(observations, rewards, terminations, truncations, infos)``
-            exactly as returned by the wrapped environment.
+            exactly as returned by the wrapped environment, with rewards adjusted.
         """
         # Expose block counts for validation/metrics this step
         self.capacity_blocks_this_step = [0] * len(self.speeds)
@@ -171,7 +180,12 @@ class HeterogeneousRWAREWrapper(gym.Wrapper):
                     self.is_carrying[agent_id] = True
                     self.carry_steps[agent_id] = 0
 
-        # 3. Apply battery depletion based on actual executed action
+        # Execute step in base env
+        obs, rewards, terminations, truncations, infos = self.env.step(effective_actions)
+        
+        adjusted_rewards = list(rewards)
+
+        # 3. Apply battery depletion and reward penalty based on actual executed action
         for agent_id, a in enumerate(effective_actions):
             if self.battery_levels[agent_id] > 0.0:
                 if a == 3:
@@ -182,8 +196,12 @@ class HeterogeneousRWAREWrapper(gym.Wrapper):
                     cost = 1.0
                     
                 self.battery_levels[agent_id] = max(0.0, self.battery_levels[agent_id] - cost)
+                self.energy_consumed[agent_id] += cost
+                
+                # Apply penalty to reward
+                adjusted_rewards[agent_id] -= (self.energy_weight * cost)
 
-        return self.env.step(effective_actions)
+        return (obs, tuple(adjusted_rewards), terminations, truncations, infos)
 
 def build_heterogeneous_env(config: dict) -> gym.Env:
     """Builds and wraps the environment based on the configuration dict.
@@ -209,6 +227,8 @@ def build_heterogeneous_env(config: dict) -> gym.Env:
     enabled = het_cfg.get("enabled", False)
     agents_cfg = het_cfg.get("agents", [])
 
+    energy_weight = het_cfg.get("energy_weight", 0.0)
+
     if not enabled or len(agents_cfg) != n_agents:
         # Fallback to homogeneous / unconstrained defaults
         speeds = [1.0] * n_agents
@@ -223,6 +243,7 @@ def build_heterogeneous_env(config: dict) -> gym.Env:
         base_env,
         speeds=speeds,
         capacities=capacities,
-        battery_capacities=battery_capacities
+        battery_capacities=battery_capacities,
+        energy_weight=energy_weight
     )
 
