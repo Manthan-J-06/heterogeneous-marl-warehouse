@@ -1,0 +1,17 @@
+environment:
+  env_id: rware-tiny-2ag-v2
+  max_steps: 500
+
+heterogeneity:
+  enabled: true
+  agents:
+    - speed: 1.0
+      capacity: 2
+      battery_capacity: 40.0
+    - speed: 0.5
+      capacity: 10
+      battery_capacity: 100.0
+
+validation:
+  num_episodes: 5
+  seed: 42
