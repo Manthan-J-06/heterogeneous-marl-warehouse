@@ -30,27 +30,29 @@ except ImportError as exc:
         f"Original error: {exc}"
     )
 
-from heterogeneous_env import NOOP_ACTION, HeterogeneousRWAREWrapper
+import yaml
+from pathlib import Path
+from heterogeneous_env import NOOP_ACTION, HeterogeneousRWAREWrapper, build_heterogeneous_env
 
 # -----------------------------------------------------------------------
 # Configuration
 # -----------------------------------------------------------------------
-ENV_ID = "rware-tiny-2ag-v2"
-SPEEDS: List[float] = [1.0, 0.3]
-CAPACITIES: List[int] = [10, 10]
-BATTERY_CAPACITIES: List[float] = [50.0, 50.0]
-NUM_EPISODES = 5
+CONFIG_PATH = "configs/heterogeneous_small.yaml"
+
+with open(CONFIG_PATH, "r") as f:
+    config = yaml.safe_load(f)
+
+ENV_ID = config.get("environment", {}).get("env_id", "rware-tiny-2ag-v2")
+NUM_EPISODES = config.get("validation", {}).get("num_episodes", 5)
 
 # -----------------------------------------------------------------------
 # Setup
 # -----------------------------------------------------------------------
-base_env = gym.make(ENV_ID)
-env = HeterogeneousRWAREWrapper(
-    base_env, 
-    speeds=SPEEDS, 
-    capacities=CAPACITIES, 
-    battery_capacities=BATTERY_CAPACITIES
-)
+env = build_heterogeneous_env(config)
+
+SPEEDS = env.speeds
+CAPACITIES = env.capacities
+BATTERY_CAPACITIES = env.battery_capacities
 n_agents = len(SPEEDS)
 
 total_steps = 0
@@ -92,8 +94,8 @@ for episode in range(1, NUM_EPISODES + 1):
         
         # Accumulate capacity constraints and dead blocks this step
         for i in range(n_agents):
-            capacity_blocked_counts[i] += env.capacity_blocks_this_step[i]
-            dead_counts[i] += env.dead_blocks_this_step[i]
+            capacity_blocked_counts[i] += getattr(env, "capacity_blocks_this_step", [0]*n_agents)[i]
+            dead_counts[i] += getattr(env, "dead_blocks_this_step", [0]*n_agents)[i]
 
         episode_steps += 1
 
@@ -115,7 +117,10 @@ for episode in range(1, NUM_EPISODES + 1):
     print(f"  Episode {episode}: {episode_steps} steps")
 
 # Snapshot final battery levels before closing
-final_batteries = env.get_battery_levels()
+if hasattr(env, "get_battery_levels"):
+    final_batteries = env.get_battery_levels()
+else:
+    final_batteries = [0.0] * n_agents
 env.close()
 
 # -----------------------------------------------------------------------
@@ -138,8 +143,9 @@ for i in range(n_agents):
 
 print()
 print("Validation notes:")
-print(f"  Agent 0 final battery: {final_batteries[0]:.1f}")
-print(f"  Agent 1 final battery: {final_batteries[1]:.1f}")
-print(f"  Agent 0 (speed 1.0): speed no-ops should be ~0%   → got {noop_counts[0] / max(action_counts[0],1)*100:.1f}%")
-print(f"  Agent 1 (speed 0.3): speed no-ops should be ~70%  → got {noop_counts[1] / max(action_counts[1],1)*100:.1f}%")
+for i in range(min(2, n_agents)):
+    print(f"  Agent {i} final battery: {final_batteries[i]:.1f}")
+print(f"  Agent 0 (speed: {SPEEDS[0]:.1f}): speed no-ops should be ~{(1 - SPEEDS[0])*100:.0f}%   → got {noop_counts[0] / max(action_counts[0],1)*100:.1f}%")
+if n_agents > 1:
+    print(f"  Agent 1 (speed: {SPEEDS[1]:.1f}): speed no-ops should be ~{(1 - SPEEDS[1])*100:.0f}%  → got {noop_counts[1] / max(action_counts[1],1)*100:.1f}%")
 print(f"  Dead Steps: Should be non-zero if total steps * avg cost > battery budget.")

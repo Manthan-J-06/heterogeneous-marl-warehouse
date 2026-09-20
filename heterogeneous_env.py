@@ -184,3 +184,45 @@ class HeterogeneousRWAREWrapper(gym.Wrapper):
                 self.battery_levels[agent_id] = max(0.0, self.battery_levels[agent_id] - cost)
 
         return self.env.step(effective_actions)
+
+def build_heterogeneous_env(config: dict) -> gym.Env:
+    """Builds and wraps the environment based on the configuration dict.
+
+    Parameters
+    ----------
+    config : dict
+        A configuration dictionary matching the structure of `configs/*.yaml`.
+        Must contain 'environment' and 'heterogeneity' sections.
+
+    Returns
+    -------
+    gym.Env
+        The wrapped heterogeneous Gymnasium environment.
+    """
+    env_cfg = config.get("environment", {})
+    env_id = env_cfg.get("env_id", "rware-tiny-2ag-v2")
+
+    base_env = gym.make(env_id)
+    n_agents = len(base_env.action_space)
+
+    het_cfg = config.get("heterogeneity", {})
+    enabled = het_cfg.get("enabled", False)
+    agents_cfg = het_cfg.get("agents", [])
+
+    if not enabled or len(agents_cfg) != n_agents:
+        # Fallback to homogeneous / unconstrained defaults
+        speeds = [1.0] * n_agents
+        capacities = [999999] * n_agents
+        battery_capacities = [999999.0] * n_agents
+    else:
+        speeds = [float(a.get("speed", 1.0)) for a in agents_cfg]
+        capacities = [int(a.get("capacity", 999999)) for a in agents_cfg]
+        battery_capacities = [float(a.get("battery_capacity", 999999.0)) for a in agents_cfg]
+
+    return HeterogeneousRWAREWrapper(
+        base_env,
+        speeds=speeds,
+        capacities=capacities,
+        battery_capacities=battery_capacities
+    )
+
