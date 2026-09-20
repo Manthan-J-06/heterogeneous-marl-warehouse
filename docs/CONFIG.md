@@ -116,3 +116,75 @@ env = MockEnv(config=config)
 
 ```
 
+## Heterogeneity Schema (Phase 2)
+
+The `heterogeneity` block defines how agent parameters (speed, load capacity, battery) vary across the fleet. Two modes are supported:
+
+```yaml
+heterogeneity:
+  enabled: true
+  mode: uniform   # "uniform" or "explicit"
+
+  # Used when mode is "uniform"
+  uniform_ranges:
+    speed: [0.5, 1.5]
+    load_capacity: [1, 5]
+    battery: [50, 100]
+
+  # Used when mode is "explicit"
+  explicit_fleet: []
+```
+
+### Field descriptions
+
+| Field | Type | Description |
+|---|---|---|
+| `heterogeneity.enabled` | bool | Whether agents have varying parameters. If `false`, all agents use identical defaults. |
+| `heterogeneity.mode` | string | `"uniform"` — agents randomly drawn from ranges. `"explicit"` — agents manually defined. |
+| `heterogeneity.uniform_ranges.speed` | list | `[min, max]` speed range agents are randomly drawn from (uniform mode only). |
+| `heterogeneity.uniform_ranges.load_capacity` | list | `[min, max]` load capacity range (uniform mode only). |
+| `heterogeneity.uniform_ranges.battery` | list | `[min, max]` battery/energy range (uniform mode only). |
+| `heterogeneity.explicit_fleet` | list | One entry per agent with exact `agent_id`, `speed`, `load_capacity`, `battery` values (explicit mode only). Length must equal `num_agents`. |
+
+### Uniform mode example
+
+Agents are randomly generated within the given ranges each run:
+
+```yaml
+uniform_ranges:
+  speed: [0.5, 1.5]
+  load_capacity: [1, 5]
+  battery: [50, 100]
+```
+
+### Explicit mode example
+
+Every agent's exact parameters are hand-defined:
+
+```yaml
+explicit_fleet:
+  - agent_id: 0
+    speed: 1.2
+    load_capacity: 3
+    battery: 90
+  - agent_id: 1
+    speed: 0.8
+    load_capacity: 5
+    battery: 60
+```
+
+### New example configs
+
+- `low_variance_fleet.yaml` — narrow parameter ranges, agents are similar to each other
+- `high_variance_fleet.yaml` — wide parameter ranges, agents are very different from each other
+- `explicit_fleet_example.yaml` — demonstrates explicit mode with 3 hand-defined agents
+
+### Generating a fleet in code
+
+```python
+from config_loader import load_config, build_fleet
+
+config = load_config("configs/low_variance_fleet.yaml")
+fleet = build_fleet(config)
+# fleet is a list of dicts: [{"agent_id": 0, "speed": ..., "load_capacity": ..., "battery": ...}, ...]
+```

@@ -6,7 +6,15 @@ environment:
   num_agents: 4          # total number of agents in the environment
   episode_length: 200    # max number of steps per episode
 
-# Placeholder for future heterogeneity params (Phase 2+)
 heterogeneity:
-  enabled: false
-  agent_types: []        # e.g. ["scout", "carrier"] later on
+  enabled: true
+  mode: uniform   # options: "uniform" or "explicit"
+
+  # Used when mode is "uniform" — agents are randomly drawn from these ranges
+  uniform_ranges:
+    speed: [0.5, 1.5]
+    load_capacity: [1, 5]
+    battery: [50, 100]
+
+  # Used when mode is "explicit" — ignored unless mode is "explicit"
+  explicit_fleet: []

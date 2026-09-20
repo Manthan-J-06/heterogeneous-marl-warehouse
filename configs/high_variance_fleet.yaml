@@ -1,0 +1,16 @@
+environment:
+  grid_size: 10
+  num_agents: 4
+  episode_length: 200
+
+heterogeneity:
+  enabled: true
+  mode: uniform
+
+  # Wide ranges = agents can be very different from each other
+  uniform_ranges:
+    speed: [0.3, 2.0]
+    load_capacity: [1, 8]
+    battery: [20, 100]
+
+  explicit_fleet: []

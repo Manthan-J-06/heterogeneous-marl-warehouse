@@ -1,0 +1,16 @@
+environment:
+  grid_size: 10
+  num_agents: 4
+  episode_length: 200
+
+heterogeneity:
+  enabled: true
+  mode: uniform
+
+  # Narrow ranges = agents are very similar to each other
+  uniform_ranges:
+    speed: [0.9, 1.1]
+    load_capacity: [3, 4]
+    battery: [85, 100]
+
+  explicit_fleet: []
