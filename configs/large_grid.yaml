@@ -1,0 +1,8 @@
+environment:
+  grid_size: 20
+  num_agents: 8
+  episode_length: 300
+
+heterogeneity:
+  enabled: false
+  agent_types: []
