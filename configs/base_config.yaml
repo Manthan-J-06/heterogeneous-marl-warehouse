@@ -1,0 +1,12 @@
+# Experiment Configuration Schema
+# ---------------------------------
+
+environment:
+  grid_size: 10          # size of the grid (10 = 10x10)
+  num_agents: 4          # total number of agents in the environment
+  episode_length: 200    # max number of steps per episode
+
+# Placeholder for future heterogeneity params (Phase 2+)
+heterogeneity:
+  enabled: false
+  agent_types: []        # e.g. ["scout", "carrier"] later on
