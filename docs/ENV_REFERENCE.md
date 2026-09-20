@@ -1,5 +1,11 @@
 # Environment Reference: RWARE and TA-RWARE
 
+> **Which environment we actually use:** this project uses plain RWARE
+> (`rware-tiny-2ag-v2`), not TA-RWARE. Section 1's TA-RWARE material below is
+> background/comparison only. The relevant sections for our actual setup are
+> the "Original RWARE" subsections in Sections 2-4 (5 discrete actions:
+> Noop/Forward/Left/Right/Load-Unload).
+
 Internal reference for the base environment used in this project. Written for teammates who have never seen RWARE.
 
 **Sources**
