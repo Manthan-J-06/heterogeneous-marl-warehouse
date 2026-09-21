@@ -1,0 +1,19 @@
+environment:
+  grid_size: 10
+  num_agents: 4
+  episode_length: 200
+  env_id: rware-tiny-4ag-v2
+
+heterogeneity:
+  enabled: true
+  mode: uniform
+  energy_weight: 0.0
+
+  # Wide ranges = agents can be very different from each other
+  # NOTE: speed must be between 0.0 and 1.0
+  uniform_ranges:
+    speed: [0.2, 1.0]
+    load_capacity: [1, 8]
+    battery: [20, 100]
+
+  explicit_fleet: []
