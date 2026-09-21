@@ -2,28 +2,30 @@ environment:
   grid_size: 10
   num_agents: 3
   episode_length: 200
+  env_id: rware-tiny-3ag-v2
 
 heterogeneity:
   enabled: true
-  mode: explicit   # options: "uniform" or "explicit"
+  mode: explicit
+  energy_weight: 0.0
 
   # Ignored when mode is "uniform"
   uniform_ranges:
-    speed: [0.5, 1.5]
+    speed: [0.6, 1.0]
     load_capacity: [1, 5]
     battery: [50, 100]
 
   # Used when mode is "explicit" — one entry per agent, exact values
   explicit_fleet:
     - agent_id: 0
-      speed: 1.2
+      speed: 0.9
       load_capacity: 3
       battery: 90
     - agent_id: 1
-      speed: 0.8
+      speed: 0.7
       load_capacity: 5
       battery: 60
     - agent_id: 2
-      speed: 1.0
+      speed: 0.85
       load_capacity: 2
       battery: 100

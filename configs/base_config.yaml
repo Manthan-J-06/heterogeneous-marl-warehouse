@@ -1,18 +1,17 @@
-# Experiment Configuration Schema
-# ---------------------------------
-
 environment:
-  grid_size: 10          # size of the grid (10 = 10x10)
-  num_agents: 4          # total number of agents in the environment
-  episode_length: 200    # max number of steps per episode
-
+  grid_size: 10
+  num_agents: 4
+  episode_length: 200
+  env_id: rware-tiny-4ag-v2
 heterogeneity:
   enabled: true
-  mode: uniform   # options: "uniform" or "explicit"
+  mode: uniform
+  energy_weight: 0.0
 
   # Used when mode is "uniform" — agents are randomly drawn from these ranges
+  # NOTE: speed must be between 0.0 and 1.0 (required by the environment wrapper)
   uniform_ranges:
-    speed: [0.5, 1.5]
+    speed: [0.6, 1.0]
     load_capacity: [1, 5]
     battery: [50, 100]
 
