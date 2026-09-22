@@ -84,3 +84,20 @@ All tooling is open-source and free; no paid infrastructure is required at the c
 
 Environment setup and baseline reproduction (Phases 1–2 of `IMPLEMENTATION_PLAN.md`) are in
 progress. See that document for full methodology, evaluation metrics, and the current phase.
+
+## Phase 2 — Baseline Training Pipeline (Homogeneous Fleet)
+
+See `algorithms/`, `envs/`, `configs/`, `train_qmix.py`, `train_mappo.py` for
+the QMIX and MAPPO baseline implementations on the homogeneous RWARE fleet.
+
+**Running it:**
+\`\`\`bash
+python train_qmix.py  --config configs/qmix_rware_homogeneous.yaml
+python train_mappo.py --config configs/mappo_rware_homogeneous.yaml
+tensorboard --logdir runs/
+\`\`\`
+
+**What was verified before this was merged:** environment wrapper, both
+training loops, checkpointing, and TensorBoard logging were run end-to-end
+on a short step budget. Full 500k-step training runs were not yet executed —
+see `results_log_template.md` for the write-up once they are.
