@@ -13,6 +13,8 @@ def parse_args():
     parser.add_argument("--config", type=str, default="configs/low_variance_fleet.yaml")
     parser.add_argument("--heterogeneity_aware", type=str, default="True", 
                         help="True/False flag or 1/0")
+    parser.add_argument("--total_steps", type=int, default=5000,
+                        help="Total environment steps for training")
     
     args, _ = parser.parse_known_args()
     return args
@@ -63,7 +65,7 @@ def main():
         heterogeneity_aware=het_aware
     )
     
-    MAX_ENV_STEPS = 5000
+    MAX_ENV_STEPS = args.total_steps
     total_steps = 0
     episode_num = 0
     
