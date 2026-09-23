@@ -111,3 +111,33 @@ fleet = build_fleet(config)
 `launch_experiment.py` is a config-driven launcher — given a config file, it builds the fleet, initializes the real heterogeneous environment, and runs a short test episode.
 
 ### Usage
+
+
+## Ablation Runner
+
+`run_ablation.py` runs multiple configs automatically and combines their results into one comparison table — useful for comparing different heterogeneity levels, grid sizes, or fleet setups side by side.
+
+### Usage
+
+Pass any number of config file paths, separated by spaces. Each one runs for 5 episodes by default.
+
+### What it does
+
+1. For each config: loads it, builds the fleet, builds the real environment, and runs 5 episodes using Manthan's `MetricsLogger`
+2. Computes summary stats per config: average throughput (tasks/episode), average energy per completed task, average episode length, and per-agent average reward (workload)
+3. Prints a comparison table to the console
+4. Saves all results combined into `ablation_results.csv` — one row per config, easy to compare in a spreadsheet
+
+### Interpreting results
+
+- **Avg Throughput**: average tasks completed per episode. Higher is better.
+- **Avg Energy Per Task**: total energy spent divided by tasks completed. Lower is better. Shows as `N/A` if zero tasks were completed (can't divide by zero).
+- **Avg Episode Length**: average number of steps before an episode ends (either by completion or truncation).
+- **Per-Agent Avg Reward**: shows workload distribution — whether some agents are contributing much more/less than others.
+
+### Important note on random actions
+
+By default, `run_ablation.py` uses **random actions** for each agent (no trained policy yet). This means task completion is rare, so `Avg Throughput` and `Avg Energy Per Task` will often show `0.0` / `N/A` — this is expected and not a bug. Warehouse tasks (navigate → pick up → carry → drop) require a specific sequence of correct actions, which random movement rarely produces by chance.
+
+The ablation runner's current purpose is to validate the **infrastructure**: config loading → environment setup → metric logging → comparison across runs. Once trained policies (MAPPO/QMIX, per the project's Phase 2 plan) are plugged in in place of random actions, throughput and energy metrics will become meaningful for comparing heterogeneity 
+levels.
