@@ -5,6 +5,7 @@ import sys
 import torch
 
 from config_loader import load_config, build_fleet
+from launch_experiment import fleet_to_agents_cfg
 from heterogeneous_env import build_heterogeneous_env
 from algorithms.heterogeneity_aware_policy import HeteroPolicyTrainer
 
@@ -31,17 +32,16 @@ def main():
     # Build standard fleet variables based on config
     fleet = build_fleet(config)
     
-    # Add mapped values expected by build_heterogeneous_env (if they differ from config_loader keys)
-    for agent in fleet:
-        agent["capacity"] = agent.get("load_capacity", 999999)
-        agent["battery_capacity"] = agent.get("battery", 999999.0)
-    
     if "heterogeneity" not in config:
         config["heterogeneity"] = {}
-    config["heterogeneity"]["agents"] = fleet
+    config["heterogeneity"]["agents"] = fleet_to_agents_cfg(fleet)
 
     # Initialize environment
     env = build_heterogeneous_env(config)
+    
+    print(f"env.speeds: {env.speeds}")
+    print(f"env.capacities: {env.capacities}")
+    print(f"env.battery_capacities: {env.battery_capacities}")
     
     # Environment specs
     num_agents = len(env.action_space)

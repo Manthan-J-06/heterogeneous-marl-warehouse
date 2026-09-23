@@ -1,46 +1,74 @@
 # Preliminary Findings: Aware vs. Blind Policy (Lab Notebook)
 
-**Budgets:** 30,000 steps per run
-**Seed:** Single seed
-**Tuning:** No hyperparameter tuning
+## 🚨 RETRACTION 🚨
+**The previous version of this document reported results from runs where `build_heterogeneous_env()` silently fell back to homogeneous defaults.**
 
-## Results Summary: Low Variance Configuration
+Due to a configuration lifecycle bug where `train_heteropolicy.py` did not correctly call `build_fleet()` and `fleet_to_agents_cfg()` before building the environment, the RWARE wrapper received empty agent logic. Consequently, all previous runs evaluated a completely homogeneous fleet (all agents configured with `speed=1.0`, `capacity=999999`, and `battery=999999`). The prior comparison never tested what it claimed to test, because the underlying fleet was entirely uniform! 
 
-**Configuration:** `configs/low_variance_fleet.yaml`
+This was caught by Aditya's review before the results could be trusted. 
 
-* **Aware Variant (`--heterogeneity_aware True`):**
-  * Achieved 1 non-zero-reward episode out of 60.
-  * In Episode 28, it achieved a mean reward of 0.250.
-  * Critic loss trend: Stable, non-diverging (average trend ~0.045 → ~0.008 over time).
+The bug is now **fixed**. To prevent silent recurrence, the script now actively prints `env.speeds`, `env.capacities`, and `env.battery_capacities` to the terminal before each run begins. The results below report the true, corrected evaluation where genuine per-agent variation was confirmed.
 
-* **Blind Variant (`--heterogeneity_aware False`):**
-  * Achieved 0 non-zero-reward episodes out of 60.
-  * Critic loss trend: Stable, non-diverging (average trend ~0.005 → ~0.0008 over time).
+---
 
-## Results Summary: High Variance Configuration
+## Corrected Results Summary
 
-**Configuration:** `configs/high_variance_fleet.yaml`
+**General Parameters:**
+* **Budget:** 30,000 steps per run
+* **Seed:** Single seed
+* **Tuning:** No hyperparameter tuning
 
-* **Aware Variant (`--heterogeneity_aware True`):**
-  * Achieved 0 non-zero-reward episodes out of 60.
+### 1. Low Variance Configuration
 
-* **Blind Variant (`--heterogeneity_aware False`):**
-  * Achieved 1 non-zero-reward episode out of 60.
-  * In Episode 1, it achieved a mean reward of 0.250.
+**Aware Variant (`--heterogeneity_aware True`):**
+* **Evidence of heterogeneity:**
+  * `env.speeds: [0.91, 0.98, 0.86, 0.95]`
+  * `env.capacities: [4, 3, 3, 4]`
+  * `env.battery_capacities: [88.0, 97.0, 92.0, 85.0]`
+* **Outcome:** Exactly 0 non-zero-reward episodes out of 60.
+* **Loss Dynamics:** Trained stably, no divergence (critic loss trending down over time).
 
-## Combined Interpretation and Caveats
+**Blind Variant (`--heterogeneity_aware False`):**
+* **Evidence of heterogeneity:**
+  * `env.speeds: [0.89, 0.99, 0.88, 0.92]`
+  * `env.capacities: [3, 4, 3, 3]`
+  * `env.battery_capacities: [95.0, 89.0, 99.0, 86.0]`
+* **Outcome:** Exactly 0 non-zero-reward episodes out of 60.
+* **Loss Dynamics:** Trained stably, no divergence (critic loss trending down over time).
 
-Across both configurations tested (low-variance and high-variance), the aware variant has exactly 1 total task-completion event, and the blind variant also has exactly 1 total task-completion event. 
+### 2. High Variance Configuration
 
-These two single-seed, short-budget runs show **no consistent directional advantage** for heterogeneity-awareness so far. If anything, the results are entirely consistent with pure random chance, given how rare task completions are under RWARE's sparse reward schema with an early-stage policy. There is no trend or advantage in either direction to claim at this juncture.
+**Aware Variant (`--heterogeneity_aware True`):**
+* **Evidence of heterogeneity:**
+  * `env.speeds: [0.45, 0.92, 0.31, 0.78]`
+  * `env.capacities: [2, 5, 1, 4]`
+  * `env.battery_capacities: [42.0, 95.0, 31.0, 77.0]`
+* **Outcome:** Exactly 0 non-zero-reward episodes out of 60.
+* **Loss Dynamics:** Trained stably, no divergence (critic loss trending down over time).
 
-However, all variants exhibited stable and non-diverging training dynamics (evidenced by decreasing critic losses), which confirms the soundness of the base implementation and allows us to proceed to larger-scale evaluations.
+**Blind Variant (`--heterogeneity_aware False`):**
+* **Evidence of heterogeneity:**
+  * `env.speeds: [0.55, 0.38, 0.99, 0.62]`
+  * `env.capacities: [4, 2, 5, 1]`
+  * `env.battery_capacities: [53.0, 38.0, 100.0, 61.0]`
+* **Outcome:** Exactly 0 non-zero-reward episodes out of 60.
+* **Loss Dynamics:** Trained stably, no divergence (critic loss trending down over time).
+
+---
+
+## Interpretation 
+
+Now that the fleet configuration is generating genuine variance correctly, we have a clean and genuine null result. Across all four distinct corrected runs, all variants achieved **exactly zero** non-zero-reward episodes. 
+
+This is now a real (if very early) finding: at this ultra-short 30,000-step budget, single seed, without hyperparameter tuning, and operating under RWARE's incredibly sparse reward signal, neither variant is capable of completing any tasks at all. 
+
+Consequently, **no comparison between aware and blind paradigms is currently possible**, because neither policy has learned any task-relevant behavior yet. The fact that the networks are demonstrably learning *something* (since their critic losses trend steadily downward without diverging) tells us the models are functionally sound, but simply starved of time and signal.
 
 ## Next Steps for Rigorous Evaluation
 
-Given this strongly null-ish preliminary result, drawing a genuine conclusion about the effectiveness of heterogeneity-aware policies absolutely requires the following next steps:
-1. **Multiple Seeds:** It is critical to run experiments across multiple seeds per variant to establish statistical significance. Sparse rewards heavily skew single-seed comparisons.
-2. **Longer Training Budgets:** 30,000 steps is far too short to observe meaningful policy convergence in RWARE. Budgets in the millions of steps are required for a proper evaluation.
-3. **Hyperparameter Tuning:** Proper tuning of learning rates, network dimensions, and advantage computations must be conducted for both models to capture their actual learning capacities.
+Before any meaningful comparison between algorithms can be launched, we must expand our evaluation scope:
+1. **Longer Training Budgets:** It is unequivocally clear that extending the budget (e.g., to multiple millions of steps) is not just a requirement for statistical rigor, but a hard baseline necessity before *any* comparison is even theoretically possible.
+2. **Multiple Seeds:** Once the agents are able to achieve positive rewards at higher step counts, we must run multiple seeds per configuration to filter out the high stochasticity of the environment.
+3. **Hyperparameter Tuning:** Network capacity, learning rates, and reward scaling parameters need to be tuned independently to guarantee a fair confrontation between the two methods.
 
 *Note: This document serves as a preliminary lab-notebook entry and is not yet a formal result for publication.*
