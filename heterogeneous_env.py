@@ -16,6 +16,7 @@ import random
 from typing import List
 
 import gymnasium as gym
+import rware
 
 # Action index for "do nothing" in RWARE
 NOOP_ACTION = 4
