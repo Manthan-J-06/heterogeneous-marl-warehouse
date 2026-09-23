@@ -31,8 +31,8 @@ The bug is now **fixed**. To prevent silent recurrence, the script now actively 
 **Blind Variant (`--heterogeneity_aware False`):**
 * **Evidence of heterogeneity:**
   * `env.speeds: [0.96, 0.86, 0.96, 0.85]`
-  * `env.capacities: [3, 4, 3, 3]`
-  * `env.battery_capacities: [95.0, 89.0, 99.0, 86.0]`
+  * `env.capacities: [4, 4, 4, 4]`
+  * `env.battery_capacities: [85.0, 97.0, 90.0, 98.0]`
 * **Outcome:** Exactly 0 non-zero-reward episodes out of 60.
 * **Loss Dynamics:** Trained stably, no divergence (critic loss trending down over time).
 
