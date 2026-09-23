@@ -15,6 +15,7 @@ from __future__ import annotations
 import random
 from typing import List
 
+import numpy as np
 import gymnasium as gym
 
 # Action index for "do nothing" in RWARE
@@ -85,6 +86,12 @@ class HeterogeneousRWAREWrapper(gym.Wrapper):
         self.battery_capacities: List[float] = list(battery_capacities)
         self.energy_weight: float = float(energy_weight)
 
+        # --- Convenience properties expected by training loops ---
+        self.n_agents: int = n_agents
+        self.n_actions: int = self.env.action_space[0].n
+        obs_space_0 = self.env.observation_space[0]
+        self.obs_dim: int = obs_space_0.shape[0] if hasattr(obs_space_0, 'shape') else obs_space_0.n
+
         # Internal state to track how long each agent has been carrying something
         self.is_carrying: List[bool] = [False] * n_agents
         self.carry_steps: List[int] = [0] * n_agents
@@ -104,10 +111,18 @@ class HeterogeneousRWAREWrapper(gym.Wrapper):
     def get_battery_levels(self) -> List[float]:
         """Return the current battery levels of each agent."""
         return list(self.battery_levels)
-        
+
     def get_energy_consumed(self) -> List[float]:
         """Return the total energy consumed by each agent since reset."""
         return list(self.energy_consumed)
+
+    def global_state(self, obs_array) -> np.ndarray:
+        """Flat concatenation of all per-agent observations.
+
+        Used by QMIX's mixing network and MAPPO's centralized critic.
+        Identical contract to RwareEnvWrapper.global_state.
+        """
+        return np.asarray(obs_array, dtype=np.float32).reshape(-1)
 
     # ------------------------------------------------------------------
     # Core override

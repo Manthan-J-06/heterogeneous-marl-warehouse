@@ -20,6 +20,8 @@ from torch.utils.tensorboard import SummaryWriter
 # Swapped homogeneous wrapper for the heterogeneous environment builder
 from heterogeneous_env import build_heterogeneous_env
 from algorithms.qmix import QMIXTrainer
+from config_loader import build_fleet
+from launch_experiment import fleet_to_agents_cfg
 
 
 class MetricsLogger:
@@ -54,12 +56,21 @@ def main(config_path, total_steps_override, checkpoint_interval_override):
     np.random.seed(cfg.get("seed", 42))
 
     # Phase 3: Initialize the heterogeneous environment
-    env = build_heterogeneous_env(config_path=config_path, seed=cfg.get("seed", 42))
-    state_dim = env.obs_dim * env.n_agents
+    fleet = build_fleet(cfg)
+    if "heterogeneity" not in cfg:
+        cfg["heterogeneity"] = {}
+    cfg["heterogeneity"]["agents"] = fleet_to_agents_cfg(fleet)
+    env = build_heterogeneous_env(cfg)
+    print(f"Speeds: {env.speeds}, Capacities: {env.capacities}, Battery capacities: {env.battery_capacities}")
+    
+    n_agents = env.n_agents
+    obs_dim = env.obs_dim
+    n_actions = env.n_actions
+    state_dim = obs_dim * n_agents
     
     # Note: Ensure Huber loss, lower LR, and Double-Q flags are set in your YAML configs 
     # so they are correctly passed to QMIXTrainer here.
-    trainer = QMIXTrainer(env.obs_dim, state_dim, env.n_agents, env.n_actions, cfg)
+    trainer = QMIXTrainer(obs_dim, state_dim, n_agents, n_actions, cfg)
     
     # Create dynamic log directory based on the config name to prevent overwriting
     config_name = os.path.basename(config_path).replace(".yaml", "")
@@ -78,7 +89,11 @@ def main(config_path, total_steps_override, checkpoint_interval_override):
         epsilon = linear_epsilon(step, cfg)
         state = env.global_state(obs)
         actions = trainer.act(obs, epsilon)
-        next_obs, reward, done, info = env.step(actions)
+        next_obs, reward, terminated, truncated, info = env.step(actions)
+        if isinstance(terminated, (list, tuple, np.ndarray)):
+            done = all(terminated) or all(truncated)
+        else:
+            done = bool(terminated) or bool(truncated)
         next_state = env.global_state(next_obs)
 
         trainer.store(obs, actions, reward, next_obs, done, state, next_state)
