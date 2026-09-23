@@ -23,8 +23,8 @@ The bug is now **fixed**. To prevent silent recurrence, the script now actively 
 **Aware Variant (`--heterogeneity_aware True`):**
 * **Evidence of heterogeneity:**
   * `env.speeds: [0.86, 0.95, 0.91, 0.86]`
-  * `env.capacities: [4, 3, 3, 4]`
-  * `env.battery_capacities: [88.0, 97.0, 92.0, 85.0]`
+  * `env.capacities: [3, 4, 3, 4]`
+  * `env.battery_capacities: [90.0, 88.0, 97.0, 96.0]`
 * **Outcome:** Exactly 0 non-zero-reward episodes out of 60.
 * **Loss Dynamics:** Trained stably, no divergence (critic loss trending down over time).
 
@@ -41,16 +41,16 @@ The bug is now **fixed**. To prevent silent recurrence, the script now actively 
 **Aware Variant (`--heterogeneity_aware True`):**
 * **Evidence of heterogeneity:**
   * `env.speeds: [0.95, 0.58, 0.24, 0.81]`
-  * `env.capacities: [2, 5, 1, 4]`
-  * `env.battery_capacities: [42.0, 95.0, 31.0, 77.0]`
+  * `env.capacities: [8, 5, 2, 6]`
+  * `env.battery_capacities: [30.0, 97.0, 28.0, 63.0]`
 * **Outcome:** Exactly 0 non-zero-reward episodes out of 60.
 * **Loss Dynamics:** Trained stably, no divergence (critic loss trending down over time).
 
 **Blind Variant (`--heterogeneity_aware False`):**
 * **Evidence of heterogeneity:**
   * `env.speeds: [0.51, 0.48, 0.27, 0.27]`
-  * `env.capacities: [4, 2, 5, 1]`
-  * `env.battery_capacities: [53.0, 38.0, 100.0, 61.0]`
+  * `env.capacities: [5, 7, 1, 1]`
+  * `env.battery_capacities: [95.0, 90.0, 33.0, 83.0]`
 * **Outcome:** Exactly 0 non-zero-reward episodes out of 60.
 * **Loss Dynamics:** Trained stably, no divergence (critic loss trending down over time).
 
