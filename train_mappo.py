@@ -92,7 +92,8 @@ def main(config_path):
         update_count += 1
         step = update * cfg["rollout_len"]
 
-        if update % cfg["log_interval"] == 0:
+        log_every_n_updates = max(1, cfg["log_interval"] // cfg["rollout_len"])
+        if update % log_every_n_updates == 0:
             elapsed = time.time() - start_time
             for k, v in stats.items():
                 logger.log_scalar(f"train/{k}", v, step)
