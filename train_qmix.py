@@ -1,15 +1,12 @@
 """
-Config-driven QMIX training on the homogeneous RWARE fleet.
+Config-driven QMIX training on the heterogeneous RWARE fleet.
 
 Usage:
-    python train_qmix.py --config configs/qmix_rware_homogeneous.yaml
-
-NOTE ON METRICS LOGGING:
-This uses a minimal `MetricsLogger` wrapper around TensorBoard's
-SummaryWriter. If Phase 1 already has a MetricsLogger class (per the PR
-that added TensorBoard integration), swap the import below for that one —
-the interface here (`log_scalar(tag, value, step)`) is deliberately tiny
-so it should be a drop-in match or a two-line adapter at most.
+    # 20k step validation
+    python train_qmix.py --config configs/low_variance_fleet.yaml --total-steps 20000
+    
+    # 500k step full run
+    python train_qmix.py --config configs/low_variance_fleet.yaml --total-steps 500000 --checkpoint-interval 25000
 """
 
 import argparse
@@ -20,8 +17,11 @@ import numpy as np
 import yaml
 from torch.utils.tensorboard import SummaryWriter
 
-from envs.rware_wrapper import RwareEnvWrapper
+# Swapped homogeneous wrapper for the heterogeneous environment builder
+from heterogeneous_env import build_heterogeneous_env
 from algorithms.qmix import QMIXTrainer
+from config_loader import build_fleet
+from launch_experiment import fleet_to_agents_cfg
 
 
 class MetricsLogger:
@@ -43,17 +43,40 @@ def linear_epsilon(step, cfg):
     return cfg["epsilon_start"] + frac * (cfg["epsilon_end"] - cfg["epsilon_start"])
 
 
-def main(config_path):
+def main(config_path, total_steps_override, checkpoint_interval_override):
     with open(config_path) as f:
         cfg = yaml.safe_load(f)
 
-    np.random.seed(cfg["seed"])
+    # Override config values with CLI arguments if provided for Phase 3 scaling
+    if total_steps_override is not None:
+        cfg["total_env_steps"] = total_steps_override
+    if checkpoint_interval_override is not None:
+        cfg["checkpoint_interval"] = checkpoint_interval_override
 
-    env = RwareEnvWrapper(cfg["env_id"], seed=cfg["seed"])
-    state_dim = env.obs_dim * env.n_agents
-    trainer = QMIXTrainer(env.obs_dim, state_dim, env.n_agents, env.n_actions, cfg)
-    logger = MetricsLogger(cfg["log_dir"])
-    ckpt_dir = os.path.join(cfg["log_dir"], "checkpoints")
+    np.random.seed(cfg.get("seed", 42))
+
+    # Phase 3: Initialize the heterogeneous environment
+    fleet = build_fleet(cfg)
+    if "heterogeneity" not in cfg:
+        cfg["heterogeneity"] = {}
+    cfg["heterogeneity"]["agents"] = fleet_to_agents_cfg(fleet)
+    env = build_heterogeneous_env(cfg)
+    print(f"Speeds: {env.speeds}, Capacities: {env.capacities}, Battery capacities: {env.battery_capacities}")
+    
+    n_agents = env.n_agents
+    obs_dim = env.obs_dim
+    n_actions = env.n_actions
+    state_dim = obs_dim * n_agents
+    
+    # Note: Ensure Huber loss, lower LR, and Double-Q flags are set in your YAML configs 
+    # so they are correctly passed to QMIXTrainer here.
+    trainer = QMIXTrainer(obs_dim, state_dim, n_agents, n_actions, cfg)
+    
+    # Create dynamic log directory based on the config name to prevent overwriting
+    config_name = os.path.basename(config_path).replace(".yaml", "")
+    run_log_dir = os.path.join(cfg.get("log_dir", "runs"), f"qmix_{config_name}")
+    logger = MetricsLogger(run_log_dir)
+    ckpt_dir = os.path.join(run_log_dir, "checkpoints")
     os.makedirs(ckpt_dir, exist_ok=True)
 
     obs, _ = env.reset()
@@ -66,7 +89,11 @@ def main(config_path):
         epsilon = linear_epsilon(step, cfg)
         state = env.global_state(obs)
         actions = trainer.act(obs, epsilon)
-        next_obs, reward, done, info = env.step(actions)
+        next_obs, reward, terminated, truncated, info = env.step(actions)
+        if isinstance(terminated, (list, tuple, np.ndarray)):
+            done = all(terminated) or all(truncated)
+        else:
+            done = bool(terminated) or bool(truncated)
         next_state = env.global_state(next_obs)
 
         trainer.store(obs, actions, reward, next_obs, done, state, next_state)
@@ -74,6 +101,7 @@ def main(config_path):
         episode_reward += float(np.sum(reward))
         episode_len += 1
 
+        # Optimization step (Huber loss and grad clipping should be handled inside here)
         loss = trainer.train_step(cfg["batch_size"])
 
         if done:
@@ -84,7 +112,7 @@ def main(config_path):
             episode_len = 0
             obs, _ = env.reset()
 
-        if step % cfg["log_interval"] == 0:
+        if step % cfg.get("log_interval", 1000) == 0:
             elapsed = time.time() - start_time
             logger.log_scalar("train/epsilon", epsilon, step)
             if loss is not None:
@@ -107,6 +135,9 @@ def main(config_path):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--config", default="configs/qmix_rware_homogeneous.yaml")
+    parser.add_argument("--config", required=True, help="Path to heterogeneous fleet YAML config")
+    parser.add_argument("--total-steps", type=int, default=None, help="Override total environment steps")
+    parser.add_argument("--checkpoint-interval", type=int, default=None, help="Override checkpoint save interval")
     args = parser.parse_args()
-    main(args.config)
+    
+    main(args.config, args.total_steps, args.checkpoint_interval)

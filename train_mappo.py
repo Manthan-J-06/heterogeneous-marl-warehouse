@@ -1,8 +1,8 @@
 """
-Config-driven MAPPO training on the homogeneous RWARE fleet.
+Config-driven MAPPO training on the heterogeneous RWARE fleet.
 
 Usage:
-    python train_mappo.py --config configs/mappo_rware_homogeneous.yaml
+    python train_mappo.py --config configs/low_variance_fleet.yaml
 
 See train_qmix.py's module docstring for the note on swapping in the
 existing Phase 1 MetricsLogger instead of the minimal one defined here.
@@ -16,8 +16,10 @@ import numpy as np
 import yaml
 from torch.utils.tensorboard import SummaryWriter
 
-from envs.rware_wrapper import RwareEnvWrapper
+from heterogeneous_env import build_heterogeneous_env
 from algorithms.mappo import MAPPOTrainer
+from config_loader import build_fleet
+from launch_experiment import fleet_to_agents_cfg
 
 
 class MetricsLogger:
@@ -36,13 +38,22 @@ def main(config_path):
     with open(config_path) as f:
         cfg = yaml.safe_load(f)
 
-    np.random.seed(cfg["seed"])
+    np.random.seed(cfg.get("seed", 42))
 
-    env = RwareEnvWrapper(cfg["env_id"], seed=cfg["seed"])
+    fleet = build_fleet(cfg)
+    if "heterogeneity" not in cfg:
+        cfg["heterogeneity"] = {}
+    cfg["heterogeneity"]["agents"] = fleet_to_agents_cfg(fleet)
+    env = build_heterogeneous_env(cfg)
+    print(f"Speeds: {env.speeds}, Capacities: {env.capacities}, Battery capacities: {env.battery_capacities}")
+
     state_dim = env.obs_dim * env.n_agents
     trainer = MAPPOTrainer(env.obs_dim, state_dim, env.n_agents, env.n_actions, cfg)
-    logger = MetricsLogger(cfg["log_dir"])
-    ckpt_dir = os.path.join(cfg["log_dir"], "checkpoints")
+
+    config_name = os.path.basename(config_path).replace(".yaml", "")
+    run_log_dir = os.path.join(cfg.get("log_dir", "runs"), f"mappo_{config_name}")
+    logger = MetricsLogger(run_log_dir)
+    ckpt_dir = os.path.join(run_log_dir, "checkpoints")
     os.makedirs(ckpt_dir, exist_ok=True)
 
     obs, _ = env.reset()
@@ -58,7 +69,11 @@ def main(config_path):
         for _ in range(cfg["rollout_len"]):
             state = env.global_state(obs)
             actions, logprobs, value = trainer.act(obs, state)
-            next_obs, reward, done, info = env.step(actions)
+            next_obs, reward, terminated, truncated, info = env.step(actions)
+            if isinstance(terminated, (list, tuple, np.ndarray)):
+                done = all(terminated) or all(truncated)
+            else:
+                done = bool(terminated) or bool(truncated)
             trainer.buffer.add(obs, state, actions, logprobs, reward, done, value)
             obs = next_obs
             episode_reward += float(np.sum(reward))
@@ -77,7 +92,8 @@ def main(config_path):
         update_count += 1
         step = update * cfg["rollout_len"]
 
-        if update % cfg["log_interval"] == 0:
+        log_every_n_updates = max(1, cfg["log_interval"] // cfg["rollout_len"])
+        if update % log_every_n_updates == 0:
             elapsed = time.time() - start_time
             for k, v in stats.items():
                 logger.log_scalar(f"train/{k}", v, step)

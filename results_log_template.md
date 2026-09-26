@@ -41,3 +41,17 @@ Reference: `MARL_Literature_Review.xlsx` / `MARL_Warehouse_Literature_Review.md`
 
 - [ ] Re-run with a second seed to check variance before trusting single-run curves
 - [ ] Decide if this baseline is solid enough to move to the heterogeneous-fleet phase
+## Heterogeneous Baseline Evaluation 
+
+### 1. Quantitative Results (500k Steps)
+
+| Algorithm | Fleet Config | Mean Reward | Throughput (Items/100 steps) | Energy Efficiency (Items/kWh) | Loss Convergence Step |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **QMIX** | Low Variance | TBD | TBD | TBD | Step ~Xk |
+| **QMIX** | High Variance | TBD | TBD | TBD | Step ~Xk |
+| **MAPPO** | Low Variance | TBD | TBD | TBD | Step ~Xk |
+| **MAPPO** | High Variance | TBD | TBD | TBD | Step ~Xk |
+
+### 2. Stability & Behavioral Notes
+- **Loss Behavior**: [Note if Huber loss / Double-Q prevented TD divergence on high-variance fleets]
+- **Heterogeneity Blindness Impact**: [Observe how blind agents perform when slow or low-battery agents fail to complete paths]
