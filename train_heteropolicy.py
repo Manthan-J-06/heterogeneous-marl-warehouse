@@ -3,6 +3,7 @@ import numpy as np
 import yaml
 import sys
 import torch
+import os
 
 from config_loader import load_config, build_fleet
 from launch_experiment import fleet_to_agents_cfg
@@ -17,6 +18,11 @@ def parse_args():
     parser.add_argument("--total_steps", type=int, default=5000,
                         help="Total environment steps for training")
     
+    parser.add_argument("--ckpt_dir", type=str, default=None,
+                        help="Checkpoint dir (default: runs/heteropolicy_<aware|blind>_<config stem>/checkpoints)")
+    parser.add_argument("--checkpoint_interval", type=int, default=10000,
+                        help="Save a checkpoint every N env steps (0 = final only)")
+
     args, _ = parser.parse_known_args()
     return args
 
@@ -65,6 +71,12 @@ def main():
         heterogeneity_aware=het_aware
     )
     
+    tag = "aware" if het_aware else "blind"
+    cfg_stem = os.path.splitext(os.path.basename(args.config))[0]
+    ckpt_dir = args.ckpt_dir or os.path.join("runs", f"heteropolicy_{tag}_{cfg_stem}", "checkpoints")
+    os.makedirs(ckpt_dir, exist_ok=True)
+    last_ckpt_step = 0
+
     MAX_ENV_STEPS = args.total_steps
     total_steps = 0
     episode_num = 0
@@ -108,12 +120,20 @@ def main():
         # update policy at end of episode
         a_loss, c_loss = trainer.train_episode()
         episode_num += 1
+        if args.checkpoint_interval and total_steps - last_ckpt_step >= args.checkpoint_interval:
+            ckpt_path = os.path.join(ckpt_dir, f"heteropolicy_{tag}_step{total_steps}.pt")
+            trainer.save(ckpt_path)
+            print(f"  Saved checkpoint: {ckpt_path}")
+            last_ckpt_step = total_steps
         
         mean_agent_reward = episode_reward / num_agents
         print(f"Episode {episode_num:4d} | Steps: {total_steps:5d}/{MAX_ENV_STEPS} | "
               f"Mean Agent Reward: {mean_agent_reward:8.3f} | " 
               f"Actor Loss: {a_loss:8.4f} | Critic Loss: {c_loss:8.4f}")
 
+    final_path = os.path.join(ckpt_dir, f"heteropolicy_{tag}_final.pt")
+    trainer.save(final_path)
+    print(f"  Saved final checkpoint: {final_path}")
     print("\nTraining completed.")
 
 if __name__ == "__main__":
