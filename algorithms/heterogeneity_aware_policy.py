@@ -154,7 +154,7 @@ class HeteroPolicyTrainer:
             "network": net.state_dict(),
             "optimizer": self.optimizer.state_dict(),
             "config": {
-                "obs_dim": in_features - self.num_agents - (3 if self.heterogeneity_aware else 0),
+                "obs_dim": int(in_features - self.num_agents - (3 if self.heterogeneity_aware else 0)),
                 "num_agents": self.num_agents,
                 "act_dim": net.actor_head.out_features,
                 "hidden_dim": net.shared_net[0].out_features,
@@ -164,7 +164,7 @@ class HeteroPolicyTrainer:
 
     @classmethod
     def load(cls, path, learning_rate=1e-4, map_location="cpu"):
-        ckpt = torch.load(path, map_location=map_location)
+        ckpt = torch.load(path, map_location=map_location, weights_only=False)  # trusted: written by save()
         trainer = cls(learning_rate=learning_rate, **ckpt["config"])
         trainer.network.load_state_dict(ckpt["network"])
         trainer.optimizer.load_state_dict(ckpt["optimizer"])
