@@ -21,16 +21,17 @@ from torch.distributions import Categorical
 
 
 class Actor(nn.Module):
-    def __init__(self, obs_dim, n_agents, n_actions, hidden_dim=64):
+    def __init__(self, obs_dim, n_agents, n_actions, hidden_dim=64, extra_dim=0):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(obs_dim + n_agents, hidden_dim), nn.Tanh(),
+            nn.Linear(obs_dim + n_agents + extra_dim, hidden_dim), nn.Tanh(),
             nn.Linear(hidden_dim, hidden_dim), nn.Tanh(),
             nn.Linear(hidden_dim, n_actions),
         )
 
-    def forward(self, obs, agent_onehot):
-        logits = self.net(torch.cat([obs, agent_onehot], dim=-1))
+    def forward(self, obs, agent_onehot, extra=None):
+        parts = [obs, agent_onehot] + ([extra] if extra is not None else [])
+        logits = self.net(torch.cat(parts, dim=-1))
         return Categorical(logits=logits)
 
 
@@ -69,7 +70,7 @@ class RolloutBuffer:
 
 
 class MAPPOTrainer:
-    def __init__(self, obs_dim, state_dim, n_agents, n_actions, cfg, device="cpu"):
+    def __init__(self, obs_dim, state_dim, n_agents, n_actions, cfg, device="cpu", agent_props=None):
         self.n_agents = n_agents
         self.n_actions = n_actions
         self.gamma = cfg["gamma"]
@@ -79,9 +80,13 @@ class MAPPOTrainer:
         self.value_loss_coef = cfg["value_loss_coef"]
         self.epochs = cfg["ppo_epochs"]
         self.device = device
+        # agent_props: (n_agents, 3) normalized [speed, capacity, battery]; None = heterogeneity-blind
+        self.aware = agent_props is not None
+        self.props = torch.as_tensor(agent_props, dtype=torch.float32, device=device) if self.aware else None
+        extra = 3 if self.aware else 0
 
-        self.actor = Actor(obs_dim, n_agents, n_actions, cfg["hidden_dim"]).to(device)
-        self.critic = CentralizedCritic(state_dim, cfg["hidden_dim"]).to(device)
+        self.actor = Actor(obs_dim, n_agents, n_actions, cfg["hidden_dim"], extra_dim=extra).to(device)
+        self.critic = CentralizedCritic(state_dim + n_agents * extra, cfg["hidden_dim"]).to(device)
         self.optimizer = torch.optim.Adam(
             list(self.actor.parameters()) + list(self.critic.parameters()),
             lr=cfg["learning_rate"],
@@ -89,12 +94,18 @@ class MAPPOTrainer:
         self.agent_onehot = torch.eye(n_agents, device=device)
         self.buffer = RolloutBuffer()
 
+    def _aug_state(self, state_t):
+        if not self.aware:
+            return state_t
+        flat = self.props.reshape(1, -1).expand(state_t.shape[0], -1)
+        return torch.cat([state_t, flat], dim=-1)
+
     def act(self, obs, state):
         """Returns actions (list[int]), logprobs (np.array[n_agents]), value (float)."""
         obs_t = torch.as_tensor(obs, dtype=torch.float32, device=self.device)
-        state_t = torch.as_tensor(state, dtype=torch.float32, device=self.device).unsqueeze(0)
+        state_t = self._aug_state(torch.as_tensor(state, dtype=torch.float32, device=self.device).unsqueeze(0))
         with torch.no_grad():
-            dist = self.actor(obs_t, self.agent_onehot)
+            dist = self.actor(obs_t, self.agent_onehot, self.props)
             actions = dist.sample()
             logprobs = dist.log_prob(actions)
             value = self.critic(state_t).item()
@@ -118,9 +129,9 @@ class MAPPOTrainer:
         team_rewards = [float(np.mean(r)) for r in self.buffer.rewards]
 
         with torch.no_grad():
-            last_value = self.critic(
+            last_value = self.critic(self._aug_state(
                 torch.as_tensor(last_state, dtype=torch.float32, device=self.device).unsqueeze(0)
-            ).item()
+            )).item()
 
         advantages, returns = self._compute_gae(
             team_rewards, self.buffer.values, self.buffer.dones, last_value
@@ -128,17 +139,18 @@ class MAPPOTrainer:
         advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
 
         obs_b = torch.as_tensor(np.array(self.buffer.obs), dtype=torch.float32, device=self.device)  # (T, n_agents, obs_dim)
-        state_b = torch.as_tensor(np.array(self.buffer.states), dtype=torch.float32, device=self.device)  # (T, state_dim)
+        state_b = self._aug_state(torch.as_tensor(np.array(self.buffer.states), dtype=torch.float32, device=self.device))  # (T, state_dim[+props])
         act_b = torch.as_tensor(np.array(self.buffer.actions), dtype=torch.long, device=self.device)  # (T, n_agents)
         old_logp_b = torch.as_tensor(np.array(self.buffer.logprobs), dtype=torch.float32, device=self.device)  # (T, n_agents)
         adv_b = torch.as_tensor(advantages, dtype=torch.float32, device=self.device)  # (T,)
         ret_b = torch.as_tensor(returns, dtype=torch.float32, device=self.device)  # (T,)
 
         agent_onehot_batch = self.agent_onehot.unsqueeze(0).expand(T, -1, -1)
+        props_b = self.props.unsqueeze(0).expand(T, -1, -1).reshape(T * self.n_agents, -1) if self.aware else None
 
         total_policy_loss, total_value_loss, total_entropy = 0.0, 0.0, 0.0
         for _ in range(self.epochs):
-            dist = self.actor(obs_b.view(T * self.n_agents, -1), agent_onehot_batch.reshape(T * self.n_agents, -1))
+            dist = self.actor(obs_b.view(T * self.n_agents, -1), agent_onehot_batch.reshape(T * self.n_agents, -1), props_b)
             new_logp = dist.log_prob(act_b.view(-1)).view(T, self.n_agents)
             entropy = dist.entropy().view(T, self.n_agents).mean()
 
