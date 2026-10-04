@@ -19,8 +19,11 @@ import numpy as np
 import gymnasium as gym
 import rware
 
-# Action index for "do nothing" in RWARE
-NOOP_ACTION = 4
+from rware.warehouse import RewardType
+
+# RWARE action enum: NOOP=0, FORWARD=1, LEFT=2, RIGHT=3, TOGGLE_LOAD=4
+NOOP_ACTION = 0
+TOGGLE_ACTION = 4
 
 
 class HeterogeneousRWAREWrapper(gym.Wrapper):
@@ -136,12 +139,12 @@ class HeterogeneousRWAREWrapper(gym.Wrapper):
         2. Speeds: For each agent *i*, with probability ``(1 - speeds[i])``
            the action is replaced by ``NOOP_ACTION``.
         3. Capacities: If an agent's ``carry_steps`` exceed ``capacities[i]``,
-           any remaining action other than Unload (3) is replaced by
+           any remaining action other than TOGGLE_LOAD (4) is replaced by
            ``NOOP_ACTION`` to force an unload.
         4. Battery depletion & Energy Penalty: The final effective action costs:
-           - Move actions (0, 1, 2) cost 1.0
-           - Load/Unload (3) costs 2.0
-           - Idle/No-op (4) costs 0.5
+           - Move actions (FORWARD/LEFT/RIGHT = 1, 2, 3) cost 1.0
+           - Toggle load (4) costs 2.0
+           - No-op (0) costs 0.5
            The cost is deducted from battery_levels and `energy_weight * cost`
            is subtracted from each agent's reward.
 
@@ -178,7 +181,7 @@ class HeterogeneousRWAREWrapper(gym.Wrapper):
                 # Update carry steps since they started this step carrying
                 self.carry_steps[agent_id] += 1
                 
-                if a == 3:
+                if a == TOGGLE_ACTION:
                     # Taking action 3 while carrying = dropping the load
                     self.is_carrying[agent_id] = False
                     self.carry_steps[agent_id] = 0
@@ -189,7 +192,7 @@ class HeterogeneousRWAREWrapper(gym.Wrapper):
                             effective_actions[agent_id] = NOOP_ACTION
                             self.capacity_blocks_this_step[agent_id] = 1
             else:
-                if a == 3:
+                if a == TOGGLE_ACTION:
                     # Taking action 3 while empty = picking up load (if over a shelf)
                     # We assume action 3 unconditionally toggles the 'carrying' state
                     # for simulation/capacity-tracking purposes.
@@ -204,7 +207,7 @@ class HeterogeneousRWAREWrapper(gym.Wrapper):
         # 3. Apply battery depletion and reward penalty based on actual executed action
         for agent_id, a in enumerate(effective_actions):
             if self.battery_levels[agent_id] > 0.0:
-                if a == 3:
+                if a == TOGGLE_ACTION:
                     cost = 2.0
                 elif a == NOOP_ACTION:
                     cost = 0.5
@@ -217,7 +220,20 @@ class HeterogeneousRWAREWrapper(gym.Wrapper):
                 # Apply penalty to reward
                 adjusted_rewards[agent_id] -= (self.energy_weight * cost)
 
-        return (obs, tuple(adjusted_rewards), terminations, truncations, infos)
+        # Count deliveries from the RAW (pre-penalty) RWARE reward
+        info = dict(infos) if isinstance(infos, dict) else {}
+        rt = self.env.unwrapped.reward_type
+        raw = [float(r) for r in rewards]
+        if rt == RewardType.GLOBAL:
+            deliveries = int(round(raw[0]))
+        elif rt == RewardType.INDIVIDUAL:
+            deliveries = int(round(sum(raw)))
+        else:
+            raise NotImplementedError(f"delivery counting not implemented for reward_type={rt}")
+        info["deliveries"] = deliveries
+        info["task_completed"] = deliveries > 0
+
+        return (obs, tuple(adjusted_rewards), terminations, truncations, info)
 
 def build_heterogeneous_env(config: dict) -> gym.Env:
     """Builds and wraps the environment based on the configuration dict.
