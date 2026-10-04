@@ -2,7 +2,7 @@ environment:
   grid_size: 10
   num_agents: 4
   episode_length: 200
-  env_id: rware-tiny-4ag-v2
+  env_id: rware-tiny-4ag-easy-v2  # TEMP: easy variant (queue 8) for reward signal; revisit
 
 heterogeneity:
   enabled: true
@@ -14,7 +14,7 @@ heterogeneity:
   uniform_ranges:
     speed: [0.85, 1.0]
     load_capacity: [3, 4]
-    battery: [85, 100]
+    battery: [850, 1000]  # TEMP: loosened 10x because recharging is not implemented yet; revisit (Option B)
 
   explicit_fleet: []
 
