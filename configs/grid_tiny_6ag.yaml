@@ -1,20 +1,18 @@
 environment:
   grid_size: 10
-  num_agents: 4
+  num_agents: 6
   episode_length: 200
-  env_id: rware-tiny-4ag-easy-v2  # TEMP: easy variant (queue 8) for reward signal; revisit
+  env_id: rware-tiny-6ag-v2
 
 heterogeneity:
   enabled: true
   mode: uniform
   energy_weight: 0.0
 
-  # Wide ranges = agents can be very different from each other
-  # NOTE: speed must be between 0.0 and 1.0
   uniform_ranges:
-    speed: [0.2, 1.0]
-    load_capacity: [1, 8]
-    battery: [200, 1000]  # TEMP: loosened 10x because recharging is not implemented yet; revisit (Option B)
+    speed: [0.6, 1.0]
+    load_capacity: [1, 5]
+    battery: [50, 100]
 
   explicit_fleet: []
 
@@ -31,12 +29,12 @@ buffer_size: 50000
 batch_size: 64
 target_update_interval: 400
 
-# Exploration (linear epsilon decay)
+# Exploration
 epsilon_start: 1.0
 epsilon_end: 0.05
 epsilon_decay_steps: 100000
 
-# MAPPO-specific hyperparameters
+# MAPPO hyperparameters
 gae_lambda: 0.95
 clip_eps: 0.2
 entropy_coef: 0.01
