@@ -11,9 +11,11 @@ Usage:
 
 import argparse
 import os
+import random
 import time
 
 import numpy as np
+import torch
 import yaml
 from torch.utils.tensorboard import SummaryWriter
 
@@ -38,12 +40,18 @@ class MetricsLogger:
         self.writer.close()
 
 
+def set_seed(seed):
+    random.seed(seed)        # epsilon-greedy, replay sampling, speed no-op injection
+    np.random.seed(seed)
+    torch.manual_seed(seed)  # network init
+
+
 def linear_epsilon(step, cfg):
     frac = min(1.0, step / cfg["epsilon_decay_steps"])
     return cfg["epsilon_start"] + frac * (cfg["epsilon_end"] - cfg["epsilon_start"])
 
 
-def main(config_path, total_steps_override, checkpoint_interval_override):
+def main(config_path, total_steps_override, checkpoint_interval_override, seed_override=None):
     with open(config_path) as f:
         cfg = yaml.safe_load(f)
 
@@ -53,7 +61,10 @@ def main(config_path, total_steps_override, checkpoint_interval_override):
     if checkpoint_interval_override is not None:
         cfg["checkpoint_interval"] = checkpoint_interval_override
 
-    np.random.seed(cfg.get("seed", 42))
+    if seed_override is not None:
+        cfg["seed"] = seed_override
+    seed = cfg.get("seed", 42)
+    set_seed(seed)
 
     # Phase 3: Initialize the heterogeneous environment
     fleet = build_fleet(cfg)
@@ -72,14 +83,14 @@ def main(config_path, total_steps_override, checkpoint_interval_override):
     # so they are correctly passed to QMIXTrainer here.
     trainer = QMIXTrainer(obs_dim, state_dim, n_agents, n_actions, cfg)
     
-    # Create dynamic log directory based on the config name to prevent overwriting
+    # Create dynamic log directory based on the config name and seed to prevent overwriting
     config_name = os.path.basename(config_path).replace(".yaml", "")
-    run_log_dir = os.path.join(cfg.get("log_dir", "runs"), f"qmix_{config_name}")
+    run_log_dir = os.path.join(cfg.get("log_dir", "runs"), f"qmix_{config_name}_seed{seed}")
     logger = MetricsLogger(run_log_dir)
     ckpt_dir = os.path.join(run_log_dir, "checkpoints")
     os.makedirs(ckpt_dir, exist_ok=True)
 
-    obs, _ = env.reset()
+    obs, _ = env.reset(seed=seed)
     episode_reward = 0.0
     episode_len = 0
     episode_count = 0
@@ -138,6 +149,7 @@ if __name__ == "__main__":
     parser.add_argument("--config", required=True, help="Path to heterogeneous fleet YAML config")
     parser.add_argument("--total-steps", type=int, default=None, help="Override total environment steps")
     parser.add_argument("--checkpoint-interval", type=int, default=None, help="Override checkpoint save interval")
+    parser.add_argument("--seed", type=int, default=None, help="Override random seed")
     args = parser.parse_args()
     
-    main(args.config, args.total_steps, args.checkpoint_interval)
+    main(args.config, args.total_steps, args.checkpoint_interval, args.seed)
