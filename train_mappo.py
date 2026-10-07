@@ -15,6 +15,7 @@ import random
 import time
 
 import numpy as np
+import torch
 import yaml
 from torch.utils.tensorboard import SummaryWriter
 
@@ -36,15 +37,27 @@ class MetricsLogger:
         self.writer.close()
 
 
-def main(config_path, aware=False, fleet_seed=None, total_steps=None):
+def set_seed(seed):
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+
+
+def main(config_path, aware=False, fleet_seed=None, total_steps_override=None, checkpoint_interval_override=None, seed_override=None):
     with open(config_path) as f:
         cfg = yaml.safe_load(f)
 
-    np.random.seed(cfg.get("seed", 42))
+    if total_steps_override is not None:
+        cfg["total_env_steps"] = total_steps_override
+    if checkpoint_interval_override is not None:
+        cfg["checkpoint_interval"] = checkpoint_interval_override
+
+    if seed_override is not None:
+        cfg["seed"] = seed_override
+    seed = cfg.get("seed", 42)
+    set_seed(seed)
     if fleet_seed is not None:
         random.seed(fleet_seed)
-    if total_steps is not None:
-        cfg["total_env_steps"] = total_steps
 
     fleet = build_fleet(cfg)
     if "heterogeneity" not in cfg:
@@ -58,14 +71,14 @@ def main(config_path, aware=False, fleet_seed=None, total_steps=None):
     trainer = MAPPOTrainer(env.obs_dim, state_dim, env.n_agents, env.n_actions, cfg, agent_props=agent_props)
 
     config_name = os.path.basename(config_path).replace(".yaml", "")
-    run_log_dir = os.path.join(cfg.get("log_dir", "runs"), f"mappo_{'aware' if aware else 'blind'}_{config_name}")
+    run_log_dir = os.path.join(cfg.get("log_dir", "runs"), f"mappo_{'aware' if aware else 'blind'}_{config_name}_seed{seed}")
     logger = MetricsLogger(run_log_dir)
     ckpt_dir = os.path.join(run_log_dir, "checkpoints")
     os.makedirs(ckpt_dir, exist_ok=True)
     with open(os.path.join(ckpt_dir, "fleet.json"), "w") as ff:
         json.dump({"aware": aware, "fleet_seed": fleet_seed, "speeds": list(env.speeds), "capacities": list(env.capacities), "batteries": list(env.battery_capacities)}, ff)
 
-    obs, _ = env.reset()
+    obs, _ = env.reset(seed=seed)
     episode_reward = 0.0
     episode_len = 0
     episode_count = 0
@@ -127,6 +140,9 @@ if __name__ == "__main__":
     parser.add_argument("--config", default="configs/mappo_rware_homogeneous.yaml")
     parser.add_argument("--aware", action="store_true")
     parser.add_argument("--fleet_seed", type=int, default=None)
-    parser.add_argument("--total_steps", type=int, default=None)
+    parser.add_argument("--total-steps", type=int, default=None, help="Override total environment steps")
+    parser.add_argument("--checkpoint-interval", type=int, default=None, help="Override checkpoint save interval")
+    parser.add_argument("--seed", type=int, default=None, help="Override random seed")
     args = parser.parse_args()
-    main(args.config, args.aware, args.fleet_seed, args.total_steps)
+    main(args.config, args.aware, args.fleet_seed, args.total_steps, args.checkpoint_interval, args.seed)
+
