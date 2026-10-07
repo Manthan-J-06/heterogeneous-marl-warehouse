@@ -146,3 +146,41 @@ class HeteroPolicyTrainer:
         # Normalize losses for reporting
         total_steps = T * self.num_agents
         return (actor_loss.item() / total_steps), (critic_loss.item() / total_steps)
+
+    def save(self, path):
+        net = self.network
+        in_features = net.shared_net[0].in_features
+        torch.save({
+            "network": net.state_dict(),
+            "optimizer": self.optimizer.state_dict(),
+            "config": {
+                "obs_dim": int(in_features - self.num_agents - (3 if self.heterogeneity_aware else 0)),
+                "num_agents": self.num_agents,
+                "act_dim": net.actor_head.out_features,
+                "hidden_dim": net.shared_net[0].out_features,
+                "heterogeneity_aware": self.heterogeneity_aware,
+            },
+        }, path)
+
+    @classmethod
+    def load(cls, path, learning_rate=1e-4, map_location="cpu"):
+        ckpt = torch.load(path, map_location=map_location, weights_only=False)  # trusted: written by save()
+        trainer = cls(learning_rate=learning_rate, **ckpt["config"])
+        trainer.network.load_state_dict(ckpt["network"])
+        trainer.optimizer.load_state_dict(ckpt["optimizer"])
+        trainer.network.eval()
+        return trainer
+
+    @torch.no_grad()
+    def act(self, obs_list, agents_props, deterministic=False):
+        """Eval-only action selection. No gradients, does not touch training buffers."""
+        actions = []
+        for i, obs in enumerate(obs_list):
+            inputs = self._build_input(obs, i, agents_props[i]).unsqueeze(0).to(self.device)
+            logits, _ = self.network(inputs)
+            if deterministic:
+                action = logits.argmax(dim=-1)
+            else:
+                action = torch.distributions.Categorical(logits=logits).sample()
+            actions.append(action.item())
+        return actions
