@@ -1,5 +1,7 @@
 import argparse
+import json
 import numpy as np
+import random
 import yaml
 import sys
 import torch
@@ -22,6 +24,8 @@ def parse_args():
                         help="Checkpoint dir (default: runs/heteropolicy_<aware|blind>_<config stem>/checkpoints)")
     parser.add_argument("--checkpoint_interval", type=int, default=10000,
                         help="Save a checkpoint every N env steps (0 = final only)")
+    parser.add_argument("--fleet_seed", type=int, default=None,
+                        help="Seed for fleet sampling (pins the fleet drawn by build_fleet)")
 
     args, _ = parser.parse_known_args()
     return args
@@ -36,6 +40,8 @@ def main():
     config = load_config(args.config)
     
     # Build standard fleet variables based on config
+    if args.fleet_seed is not None:
+        random.seed(args.fleet_seed)
     fleet = build_fleet(config)
     
     if "heterogeneity" not in config:
@@ -75,6 +81,10 @@ def main():
     cfg_stem = os.path.splitext(os.path.basename(args.config))[0]
     ckpt_dir = args.ckpt_dir or os.path.join("runs", f"heteropolicy_{tag}_{cfg_stem}", "checkpoints")
     os.makedirs(ckpt_dir, exist_ok=True)
+    with open(os.path.join(ckpt_dir, "fleet.json"), "w") as _ff:
+        json.dump({"speeds": list(env.speeds), "capacities": list(env.capacities),
+                   "batteries": list(env.battery_capacities), "aware": het_aware,
+                   "fleet_seed": args.fleet_seed}, _ff)
     last_ckpt_step = 0
 
     MAX_ENV_STEPS = args.total_steps
