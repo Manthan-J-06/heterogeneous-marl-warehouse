@@ -54,7 +54,7 @@ class HeterogeneousRWAREWrapper(gym.Wrapper):
         capacity, or battery values does not match the number of agents.
     """
 
-    def __init__(self, env: gym.Env, speeds: List[float], capacities: List[int] = None, battery_capacities: List[float] = None, energy_weight: float = 0.0) -> None:
+    def __init__(self, env: gym.Env, speeds: List[float], capacities: List[int] = None, battery_capacities: List[float] = None, energy_weight: float = 0.0, recharge_rate: float = 0.0) -> None:
         super().__init__(env)
 
         n_agents = len(env.action_space)
@@ -89,6 +89,8 @@ class HeterogeneousRWAREWrapper(gym.Wrapper):
         self.capacities: List[int] = list(capacities)
         self.battery_capacities: List[float] = list(battery_capacities)
         self.energy_weight: float = float(energy_weight)
+        # Passive recharge per executed-NOOP step (0.0 = off, identical to previous behaviour)
+        self.recharge_rate: float = float(recharge_rate)
 
         # --- Convenience properties expected by training loops ---
         self.n_agents: int = n_agents
@@ -220,6 +222,15 @@ class HeterogeneousRWAREWrapper(gym.Wrapper):
                 # Apply penalty to reward
                 adjusted_rewards[agent_id] -= (self.energy_weight * cost)
 
+        # 4. Passive recharge: agents whose EXECUTED action is NOOP (incl. speed-skips,
+        #    capacity blocks, dead-forced NOOP) regain recharge_rate, capped at capacity.
+        if self.recharge_rate > 0.0:
+            for agent_id, a in enumerate(effective_actions):
+                if a == NOOP_ACTION:
+                    self.battery_levels[agent_id] = min(
+                        self.battery_capacities[agent_id],
+                        self.battery_levels[agent_id] + self.recharge_rate)
+
         # Count deliveries from the RAW (pre-penalty) RWARE reward
         info = dict(infos) if isinstance(infos, dict) else {}
         rt = self.env.unwrapped.reward_type
@@ -260,6 +271,7 @@ def build_heterogeneous_env(config: dict) -> gym.Env:
     agents_cfg = het_cfg.get("agents", [])
 
     energy_weight = het_cfg.get("energy_weight", 0.0)
+    recharge_rate = het_cfg.get("recharge_rate", 0.0)
 
     if not enabled or len(agents_cfg) != n_agents:
         # Fallback to homogeneous / unconstrained defaults
@@ -276,6 +288,7 @@ def build_heterogeneous_env(config: dict) -> gym.Env:
         speeds=speeds,
         capacities=capacities,
         battery_capacities=battery_capacities,
-        energy_weight=energy_weight
+        energy_weight=energy_weight,
+        recharge_rate=recharge_rate
     )
 
