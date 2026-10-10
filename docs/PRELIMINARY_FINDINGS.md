@@ -72,3 +72,9 @@ Before any meaningful comparison between algorithms can be launched, we must exp
 3. **Hyperparameter Tuning:** Network capacity, learning rates, and reward scaling parameters need to be tuned independently to guarantee a fair confrontation between the two methods.
 
 *Note: This document serves as a preliminary lab-notebook entry and is not yet a formal result for publication.*
+
+## Update 2026-10-11 (supersedes the Phase 3 interpretation above)
+During Phase 4 debugging, a wrapper bug (wrong action indices: NOOP=4, toggle=3, versus RWARE's NOOP=0, TOGGLE_LOAD=4) and heavy battery depletion were found and fixed. These were reported during debugging; we did not re-run them on the Phase 3 configuration, so the Phase 3 null is not attributed to sparse reward alone.
+Rerun on the corrected environment: low_variance_fleet, fleet pinned (fleet_seed 7), 30k training steps, 3 training seeds per variant, 500 evaluation episodes on shared episode seeds.
+Total deliveries: aware 75/86/54, blind 86/94/57, random 87.
+Neither variant beat random, and aware vs blind was not distinguishable (seed-to-seed spread exceeded the gap). Single fleet only; not evidence about other fleets, longer training, or shaped reward.
