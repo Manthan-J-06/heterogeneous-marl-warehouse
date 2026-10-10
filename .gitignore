@@ -22,3 +22,4 @@ checkpoints/
 Thumbs.db
 metrics.csv
 tempCodeRunnerFile.py
+eval_out/

@@ -26,6 +26,8 @@ def parse_args():
                         help="Save a checkpoint every N env steps (0 = final only)")
     parser.add_argument("--fleet_seed", type=int, default=None,
                         help="Seed for fleet sampling (pins the fleet drawn by build_fleet)")
+    parser.add_argument("--seed", type=int, default=None,
+                        help="Global RNG seed applied after fleet is built (random, numpy, torch)")
 
     args, _ = parser.parse_known_args()
     return args
@@ -43,7 +45,13 @@ def main():
     if args.fleet_seed is not None:
         random.seed(args.fleet_seed)
     fleet = build_fleet(config)
-    
+
+    # Apply global RNG seed (after fleet is drawn so --fleet_seed is unaffected)
+    if args.seed is not None:
+        random.seed(args.seed)
+        np.random.seed(args.seed)
+        torch.manual_seed(args.seed)
+
     if "heterogeneity" not in config:
         config["heterogeneity"] = {}
     config["heterogeneity"]["agents"] = fleet_to_agents_cfg(fleet)
@@ -92,7 +100,8 @@ def main():
     episode_num = 0
     
     while total_steps < MAX_ENV_STEPS:
-        obs, _ = env.reset()
+        reset_seed = args.seed + episode_num if args.seed is not None else None
+        obs, _ = env.reset() if reset_seed is None else env.reset(seed=reset_seed)
         episode_reward = 0.0
         done = False
         
