@@ -80,11 +80,11 @@ validation:
 - **Agents:** 2
 - **Grid Layout:** Tiny (~10 × 11 grid layout with shelf racks and delivery stations)
 - **Action Space (per agent):** `Discrete(5)`
-  - `0`: Turn Left
-  - `1`: Turn Right
-  - `2`: Move Forward
-  - `3`: Load / Unload Shelf
-  - `4`: No-op (Wait)
+  - `0`: No-op (Wait)
+  - `1`: Move Forward
+  - `2`: Turn Left
+  - `3`: Turn Right
+  - `4`: Load / Unload Shelf (toggle)
 - **Observation Space (per agent):** `Box(low=-inf, high=inf, shape=(71,), dtype=float32)` (or discrete grid features)
 - **Max Steps:** 500 steps per episode
 
