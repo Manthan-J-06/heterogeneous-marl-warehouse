@@ -21,6 +21,7 @@ heterogeneity:
   enabled: true
   mode: uniform                  # "uniform" or "explicit"
   energy_weight: 0.0             # How much battery usage penalizes reward
+  recharge_rate: 0.0             # Battery regained per executed NOOP step (0.0 = off)
 
   # Used when mode is "uniform" — agents randomly drawn from these ranges
   # NOTE: speed must be between 0.0 and 1.0
@@ -44,6 +45,7 @@ heterogeneity:
 | `heterogeneity.enabled` | bool | Whether agents have varying parameters. If `false`, all agents use identical defaults |
 | `heterogeneity.mode` | string | `"uniform"` — agents randomly drawn from ranges. `"explicit"` — agents manually defined |
 | `heterogeneity.energy_weight` | float | How much battery/energy usage penalizes each agent's reward |
+| `heterogeneity.recharge_rate` | float | Battery regained per executed NOOP step (default 0.0 = off) |
 | `heterogeneity.uniform_ranges.speed` | list | `[min, max]` speed range, must stay within 0.0–1.0 (uniform mode only) |
 | `heterogeneity.uniform_ranges.load_capacity` | list | `[min, max]` load capacity range (uniform mode only) |
 | `heterogeneity.uniform_ranges.battery` | list | `[min, max]` battery/energy range (uniform mode only) |
