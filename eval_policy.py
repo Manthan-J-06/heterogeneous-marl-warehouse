@@ -32,7 +32,7 @@ def evaluate(config_path, fleet_seed, episodes, ckpt=None, deterministic=False, 
     deliveries, ep_with, energy = [], 0, 0.0
     for ep in range(episodes):
         s = base_seed + ep
-        random.seed(s); np.random.seed(s)
+        random.seed(s); np.random.seed(s); torch.manual_seed(s)
         obs, _ = env.reset(seed=s)
         d = 0
         for t in range(500):
