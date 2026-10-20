@@ -51,11 +51,26 @@ def run_high_variance_experiment(fleet_seed=1, train_seed=42):
         log_path = f"logs/train_highvar_{mode_str}_fleet{fleet_seed}_seed{train_seed}.log"
         t0 = time.time()
         run_cmd(cmd, log_file=log_path)
-        print(f"Training completed in {time.time()-t0:.1f}s.")
-        
-        # Verify and Archive
+        # Verify fleet.json and checkpoint freshness before archiving
         run_name = f"mappo_{mode_str}_high_variance_fleet_seed{train_seed}"
         src_dir = os.path.join("runs", run_name)
+        ckpt_src_dir = os.path.join(src_dir, "checkpoints")
+        fleet_json = os.path.join(ckpt_src_dir, "fleet.json")
+        final_pt = os.path.join(ckpt_src_dir, "mappo_final.pt")
+        if not os.path.exists(fleet_json):
+            raise FileNotFoundError(f"Missing {fleet_json}")
+        if not os.path.exists(final_pt):
+            raise FileNotFoundError(f"Missing {final_pt}")
+        with open(fleet_json) as f:
+            meta = json.load(f)
+        if meta.get("fleet_seed") != fleet_seed:
+            raise ValueError(f"Fleet seed mismatch in fleet.json! Expected {fleet_seed}, got {meta.get('fleet_seed')}")
+        if meta.get("aware") != is_aware:
+            raise ValueError(f"Aware flag mismatch in fleet.json! Expected {is_aware}, got {meta.get('aware')}")
+        if os.path.getmtime(final_pt) < os.path.getmtime(fleet_json):
+            raise ValueError(f"Stale checkpoint! {final_pt} is older than {fleet_json}")
+        print(f"[Verification Passed] fleet.json matches fleet={fleet_seed}, aware={is_aware}. mappo_final.pt is fresh.")
+
         archive_dir = os.path.join("archive", f"fleet{fleet_seed}_highvar", run_name)
         os.makedirs(os.path.dirname(archive_dir), exist_ok=True)
         if os.path.exists(archive_dir):
@@ -101,7 +116,7 @@ def run_zeroed_features_ablation(fleet_seed=2, train_seed=42):
     fleet = build_fleet(c)
     c["heterogeneity"]["agents"] = fleet_to_agents_cfg(fleet)
     env = he.build_heterogeneous_env(c)
-    n = len(env.action_space)
+    n = env.n_agents
 
     ckpt_dir = os.path.join("archive", f"fleet{fleet_seed}", f"mappo_aware_low_variance_fleet_seed{train_seed}", "checkpoints")
     meta = json.load(open(os.path.join(ckpt_dir, "fleet.json")))
@@ -126,6 +141,7 @@ def run_zeroed_features_ablation(fleet_seed=2, train_seed=42):
                 s = b + ep
                 random.seed(s)
                 np.random.seed(s)
+                torch.manual_seed(s)
                 obs, _ = env.reset(seed=s)
                 for t in range(500):
                     actions, _, _ = trainer.act(obs, env.global_state(obs))

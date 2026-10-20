@@ -4,9 +4,12 @@ from experiment_runner import run_fleet_pipeline
 
 results = []
 
-# Fleet 2 was already evaluated:
+# Fleet 2: Evaluated on commit 6ed32c8 (train_seed=42). Note: original pre-PR run recorded
+# random=39, blind=13, aware=52, fwd40=67, left40=15. With per-episode torch.manual_seed(s)
+# in evaluate(), eval yields random=39, blind=12, aware=50, fwd40=67, left40=15 (noise floor +/-2).
+# Kept here as historical baseline / reference run:
 results.append({
-    "Fleet": "Fleet 2",
+    "Fleet": "Fleet 2 (pasted from earlier run)",
     "Commit": "6ed32c8",
     "random": 39,
     "blind": 13,
