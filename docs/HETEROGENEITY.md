@@ -45,7 +45,7 @@ Mechanically interpreted as the probability the agent successfully executes thei
 
 ### `capacity` (Integer)
 Defined as the **consecutive-carry limit**. 
-Once an agent picks up a load, a counter tracks their consecutive steps carrying that object. If their turn counter exceeds their `capacity`, any action they try to make *other than un-loading (pick/drop toggle)* will be forcefully blocked and converted into a `No-op`. The agent cannot do anything else until they unpack/drop the load somewhere.
+Once an agent picks up a load, a counter tracks their consecutive steps carrying that object. If their turn counter exceeds their `capacity`, any action they try to make *other than un-loading (pick/drop toggle)* will be forcefully blocked and converted into a `No-op`. The agent cannot do anything else until they unpack/drop the load somewhere. Note: carrying is tracked by a proxy state (any load-toggle action flips it, whether or not the agent is over a shelf), not by the real RWARE shelf state, so capacity is an approximation.
 
 ### `battery_capacity` (Float)
 Sets the total energy budget for the agent. 
@@ -54,7 +54,7 @@ Actions cost energy:
 *   **Load / Unload:** 2.0 units
 *   **Idle / No-op:** 0.5 units
 
-Once an agent's `battery_capacity` reaches `0.0`, they enter a **"dead"** state. Every action they attempt for the remainder of the episode is forcefully converted to a `No-op`, paralyzing them.
+Once an agent's `battery_capacity` reaches `0.0`, they enter a **"dead"** state. Every action they attempt while the battery is at zero is forcefully converted to a `No-op`, paralyzing them. With `recharge_rate` at 0 (default) this lasts the rest of the episode; with `recharge_rate` above 0 the agent revives.
 
 ---
 
