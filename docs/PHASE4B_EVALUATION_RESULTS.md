@@ -23,7 +23,7 @@ Commit Evaluated: `6ed32c8`
     - *Under `fwd40` control policy (Fleet 1, 200 episodes)*: capacity 1 produced 108,740 blocks (47 deliveries) vs. 39,267 blocks (71 deliveries) at capacity 8.
     - With counts this small, run-to-run noise on deliveries is about the square root of the total (roughly +/-7 at 50 deliveries, +/-11 on a difference of two such counts), so 42 vs 57 is at most borderline and should not be called significant. Each comparison is also a single checkpoint/fleet.
     - Block counts are inflated by the *phantom carrying* artefact above: any accidental TOGGLE flips `is_carrying`, so an agent can be "carrying" nothing and still be blocked. The numbers measure how often the proxy fires, not real physical load.
-    - Provenance: the block counts were produced by an ad-hoc capacity sweep that is not in the repo. *TODO before merge: add the script (or remove these numbers).*
+    - Provenance: the block counts come from an ad-hoc capacity sweep whose script was not committed, so they cannot be regenerated from this repo. Treat them as indicative only.
 
 ---
 
@@ -82,4 +82,11 @@ These were run after this document's 30k-step batch, with 3-5 training seeds per
   This is a tie too, with the opposite sign to 500k.
 - **Checkpoint diagnostic:** evaluating aware checkpoints with real, zeroed and rotated robot numbers gives about the same deliveries, i.e. the aware policy does not use the robot numbers. Reason: the agent ID is already an input to both policies and the fleet is fixed, so the extra inputs are redundant.
 
-*TODO: paste the exact totals from `python aggregate_results.py logs/rows_500k.json` and `logs/rows_tight.json` here.*
+**Exact totals (deliveries over 200 episodes; mean ± spread across training seeds 11, 12, 13):**
+
+| Setting | random | blind | aware | fwd40 | left40 | aware-blind (z) | aware-fwd40 (z) |
+| :--- | :---: | :---: | :---: | :---: | :---: | :---: | :---: |
+| 500k steps, Fleet 2 | 39 | 94.3 ± 11.6 | 86.3 ± 17.0 | 67 | 15 | -8.0 (-0.6, within noise); aware > blind in 1/3 seeds | +19.3 (+1.6, within noise) |
+| Tight battery, 300k steps, Fleet 2 | 10 | 16.7 ± 9.3 | 23.3 ± 19.1 | 31 | 7 | +6.7 (+1.1, within noise); aware > blind in 2/3 seeds | -7.7 (-1.0, within noise) |
+
+Both trained policies learn well above uniform random at 500k, but neither is clearly better than the forward-biased control, and aware vs. blind is a tie in both settings.
