@@ -68,7 +68,6 @@ class HeterogeneousRWAREWrapper(gym.Wrapper):
                 raise ValueError(
                     f"Speed for agent {i} must be in [0.0, 1.0], got {s}."
                 )
-
         if capacities is None:
             capacities = [int(1e9)] * n_agents
         elif len(capacities) != n_agents:
@@ -184,7 +183,7 @@ class HeterogeneousRWAREWrapper(gym.Wrapper):
                 self.carry_steps[agent_id] += 1
                 
                 if a == TOGGLE_ACTION:
-                    # Taking action 3 while carrying = dropping the load
+                    # Taking action 4 (TOGGLE) while carrying = dropping the load
                     self.is_carrying[agent_id] = False
                     self.carry_steps[agent_id] = 0
                 else:
@@ -195,9 +194,9 @@ class HeterogeneousRWAREWrapper(gym.Wrapper):
                             self.capacity_blocks_this_step[agent_id] = 1
             else:
                 if a == TOGGLE_ACTION:
-                    # Taking action 3 while empty = picking up load (if over a shelf)
-                    # We assume action 3 unconditionally toggles the 'carrying' state
-                    # for simulation/capacity-tracking purposes.
+                    # Taking action 4 (TOGGLE) while empty flips simulated carrying state.
+                    # Note: this flips unconditionally on TOGGLE without querying RWARE's
+                    # underlying true shelf load state.
                     self.is_carrying[agent_id] = True
                     self.carry_steps[agent_id] = 0
 
@@ -246,7 +245,7 @@ class HeterogeneousRWAREWrapper(gym.Wrapper):
 
         return (obs, tuple(adjusted_rewards), terminations, truncations, info)
 
-def build_heterogeneous_env(config: dict) -> gym.Env:
+def build_heterogeneous_env(config: dict) -> "HeterogeneousRWAREWrapper":
     """Builds and wraps the environment based on the configuration dict.
 
     Parameters

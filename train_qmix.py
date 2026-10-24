@@ -101,10 +101,9 @@ def main(config_path, total_steps_override, checkpoint_interval_override, seed_o
         state = env.global_state(obs)
         actions = trainer.act(obs, epsilon)
         next_obs, reward, terminated, truncated, info = env.step(actions)
-        if isinstance(terminated, (list, tuple, np.ndarray)):
-            done = all(terminated) or all(truncated)
-        else:
-            done = bool(terminated) or bool(truncated)
+        term_done = all(terminated) if isinstance(terminated, (list, tuple, np.ndarray)) else bool(terminated)
+        trunc_done = all(truncated) if isinstance(truncated, (list, tuple, np.ndarray)) else bool(truncated)
+        done = term_done or trunc_done
         next_state = env.global_state(next_obs)
 
         trainer.store(obs, actions, reward, next_obs, done, state, next_state)
