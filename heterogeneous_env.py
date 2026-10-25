@@ -113,6 +113,21 @@ class HeterogeneousRWAREWrapper(gym.Wrapper):
         self.energy_consumed = [0.0] * len(self.speeds)
         return self.env.reset(**kwargs)
 
+    def set_fleet(self, agents_cfg) -> None:
+        """Swap in a new fleet (list of {speed, capacity, battery_capacity}).
+
+        Call BEFORE reset(); reset() refills each battery to its new capacity.
+        Used by the varying-fleet experiment (new fleet every episode).
+        """
+        if len(agents_cfg) != self.n_agents:
+            raise ValueError(f"Expected {self.n_agents} agents, got {len(agents_cfg)}.")
+        speeds = [float(a["speed"]) for a in agents_cfg]
+        if any(not (0.0 <= s <= 1.0) for s in speeds):
+            raise ValueError(f"Speeds must be in [0.0, 1.0], got {speeds}.")
+        self.speeds = speeds
+        self.capacities = [int(a["capacity"]) for a in agents_cfg]
+        self.battery_capacities = [float(a["battery_capacity"]) for a in agents_cfg]
+
     def get_battery_levels(self) -> List[float]:
         """Return the current battery levels of each agent."""
         return list(self.battery_levels)

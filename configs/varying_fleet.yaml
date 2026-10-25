@@ -1,0 +1,36 @@
+environment:
+  grid_size: 10
+  num_agents: 4
+  episode_length: 200
+  env_id: rware-tiny-4ag-easy-v2
+
+heterogeneity:
+  enabled: true
+  mode: uniform
+  energy_weight: 0.0      # set e.g. 0.0002 for the energy-aware variant
+
+  # Wide ranges: robots differ a lot. A NEW fleet is drawn every episode
+  # by train_varying.py / eval_varying.py (not once per run).
+  uniform_ranges:
+    speed: [0.5, 1.0]
+    load_capacity: [2, 6]
+    battery: [250, 1000]
+
+  explicit_fleet: []
+
+seed: 42
+total_env_steps: 300000
+
+gamma: 0.99
+hidden_dim: 64
+learning_rate: 0.0001
+gae_lambda: 0.95
+clip_eps: 0.2
+entropy_coef: 0.01
+value_loss_coef: 0.5
+ppo_epochs: 4
+rollout_len: 400
+
+log_dir: runs
+checkpoint_interval: 50000
+log_interval: 1000
